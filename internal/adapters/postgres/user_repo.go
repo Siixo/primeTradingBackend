@@ -15,6 +15,20 @@ func NewUserRepository(db *sql.DB) repository.UserRepository {
 	return &UserRepository{db}
 }
 
+func (p *UserRepository) Migrate() error {
+	query := `CREATE TABLE users (
+		id          SERIAL PRIMARY KEY,
+		username    VARCHAR(50) NOT NULL UNIQUE,
+		email       VARCHAR(100) NOT NULL UNIQUE,
+		password    VARCHAR(255) NOT NULL,
+		created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+		last_login  TIMESTAMP
+	);`
+
+	_, err := p.db.Exec(query)
+	return err
+}
+
 func (p *UserRepository) Save(user model.User) error {
 	query := `INSERT INTO users(username, email, password) VALUES ($1, $2, $3)`
 	_, err := p.db.Exec(query, user.Username, user.Email, user.Password)

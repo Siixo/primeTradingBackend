@@ -20,6 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -a -installsuffix cgo -o 
 FROM scratch
 
 # Copier binaire
+COPY --from=builder /app/assets ./assets
 COPY --from=builder /go/bin/app /go/bin/app
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 

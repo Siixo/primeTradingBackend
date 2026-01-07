@@ -34,7 +34,10 @@ func main() {
 	defer db.Close()
 
 	userRepo := postgres.NewUserRepository(db)
+	_ = userRepo.Migrate()
+
 	userService := application.NewUserService(userRepo)
+	stockService := application.NewStockService()
 	userHandler := http.NewUserHandler(userService)
 
 	r := chi.NewRouter()
@@ -65,6 +68,7 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(authMiddleware.JWTAuthMiddleware)
 			r.Get("/me", userHandler.MeHandler)
+			r.Get("/stock", stockService.GetStocks)
 		})
 
 		// Admin routes
