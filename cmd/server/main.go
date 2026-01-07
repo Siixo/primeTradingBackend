@@ -2,6 +2,7 @@ package main
 
 import (
 	authMiddleware "backend/internal/middleware"
+	"fmt"
 	"log"
 	stdhttp "net/http"
 	"os"
@@ -18,10 +19,7 @@ import (
 
 func main() {
 	// Loading .env file
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
+	godotenv.Load()
 
 	dbHost := os.Getenv("DB_HOST")
 	dbPort := os.Getenv("DB_PORT")
@@ -76,7 +74,7 @@ func main() {
 	})
 
 	log.Println("server starting on :8080")
-	if err := stdhttp.ListenAndServe(":8080", r); err != nil {
+	if err := stdhttp.ListenAndServe(fmt.Sprintf("%s:%s", os.Getenv("HOST"), os.Getenv("PORT")), r); err != nil {
 		log.Fatal(err)
 	}
 }
