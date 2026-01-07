@@ -25,6 +25,9 @@ func (s *UserService) Register(req dto.RegisterRequest) error {
 	if err := V.Password(req.Password); err != nil {
 		errs = append(errs, err.(errors.ValidationError))
 	}
+	if req.Password != req.Password2 {
+		errs = append(errs, errors.ValidationError{Field: "confirmPassword", Code: "passwords do not match"})
+	}
 	if len(errs) > 0 {
 		return errs
 	}
