@@ -1,17 +1,19 @@
 package main
 
 import (
+	authMiddleware "backend/internal/middleware"
 	"log"
 	stdhttp "net/http"
 	"os"
 
+	"backend/internal/adapters/postgres"
 	"backend/internal/application"
 	http "backend/internal/handler"
-	"backend/internal/repository/postgres"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
+	"github.com/rs/cors"
 )
 
 func main() {
@@ -38,6 +40,16 @@ func main() {
 	userHandler := http.NewUserHandler(userService)
 
 	r := chi.NewRouter()
+
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3100", "http://127.0.0.1:3100"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	})
+	r.Use(c.Handler)
+
 	r.Use(middleware.Logger)
 
 	r.Get("/health", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -45,7 +57,22 @@ func main() {
 	})
 
 	r.Route("/api", func(r chi.Router) {
+		// Public routes
 		r.Post("/register", userHandler.RegisterUserHandler)
+		r.Post("/login", userHandler.LoginUserHandler)
+		r.Post("/logout", userHandler.LogoutUserHandler)
+		r.Post("/refresh", userHandler.RefreshJWTokenHandler)
+
+		// Protected routes
+		r.Group(func(r chi.Router) {
+			r.Use(authMiddleware.JWTAuthMiddleware)
+			r.Get("/me", userHandler.MeHandler)
+		})
+
+		// Admin routes
+		r.Group(func(r chi.Router) {
+			r.Use(authMiddleware.AdminRoleMiddleware)
+		})
 	})
 
 	log.Println("server starting on :8080")
