@@ -42,7 +42,7 @@ func main() {
 	r := chi.NewRouter()
 
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3100", "http://127.0.0.1:3100"},
+		AllowedOrigins:   []string{"http://localhost:3100", "http://127.0.0.1:3100", "https://primetrading-nine.vercel.app/"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		AllowCredentials: true,
