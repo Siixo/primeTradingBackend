@@ -6,6 +6,7 @@ import (
 	"log"
 	stdhttp "net/http"
 	"os"
+	"time"
 
 	"backend/internal/adapters/postgres"
 	"backend/internal/application"
@@ -80,5 +81,17 @@ func main() {
 	log.Println("server starting on :8080")
 	if err := stdhttp.ListenAndServe(fmt.Sprintf("%s:%s", os.Getenv("HOST"), os.Getenv("PORT")), r); err != nil {
 		log.Fatal(err)
+	}
+
+	ticker := time.NewTicker(3 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := stockService.UpdateMetalPrices(); err != nil {
+				log.Printf("Error updating metal prices: %v", err)
+			}
+		}
 	}
 }

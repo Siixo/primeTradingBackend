@@ -1,6 +1,7 @@
 package application
 
 import (
+	"backend/internal/domain/model"
 	"bufio"
 	"encoding/json"
 	"fmt"
@@ -109,3 +110,63 @@ func (s *StockService) GetStocks(writer stdhttp.ResponseWriter, request *stdhttp
 		return
 	}
 }
+
+// MetalPriceResponse represents the JSON response from the goldpricez.com API.
+// Prices are in USD per kg.
+// API docs: http://goldpricez.com/about/api
+// Example URL: http://goldpricez.com/api/rates/currency/usd/measure/kg
+
+// fetchMetalPrice fetches the live price of a metal in USD per kg
+// from the goldpricez.com API.
+// metal must be "gold" or "silver".
+func fetchMetalPrice(metal string) (*model.Stock, error) {
+	apiKey := os.Getenv("API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("API_KEY environment variable is not set")
+	}
+
+	apiURL := fmt.Sprintf(
+		"https://goldpricez.com/api/%s/rates/currency/usd/measure/kg",
+		strings.ToLower(metal),
+	)
+
+	req, err := stdhttp.NewRequest(stdhttp.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build request: %w", err)
+	}
+	req.Header.Set("X-API-KEY", apiKey)
+
+	client := &stdhttp.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != stdhttp.StatusOK {
+		return nil, fmt.Errorf("API returned non-200 status: %d", resp.StatusCode)
+	}
+
+	var price model.Stock
+	if err := json.NewDecoder(resp.Body).Decode(&price); err != nil {
+		return nil, fmt.Errorf("failed to decode API response: %w", err)
+	}
+
+	return &price, nil
+}
+
+// fetchGoldPrice returns the live gold price in USD per kg.
+func (s *StockService) fetchGoldPrice() (*model.Stock, error) {
+	return fetchMetalPrice("gold")
+}
+
+// fetchSilverPrice returns the live silver price in USD per kg.
+func (s *StockService) fetchSilverPrice() (*model.Stock, error) {
+	return fetchMetalPrice("silver")
+}
+
+// UpdateMetalPrices fetches the latest gold and silver prices from the API.
+// Skeleton in place; persistence and in-memory update flow will be implemented next.
+func (s *StockService) UpdateMetalPrices() error {
+	return nil 
+}	

@@ -11,5 +11,3 @@ require (
 	github.com/wagslane/go-password-validator v0.3.0
 	golang.org/x/crypto v0.46.0
 )
-
-require github.com/robfig/cron/v3 v3.0.0 // indirect

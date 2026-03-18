@@ -34,8 +34,8 @@ func JWTAuthMiddleware(next http.Handler) http.Handler {
 
 		if tokenString == "" {
 			authHeader := r.Header.Get("Authorization")
-			if strings.HasPrefix(authHeader, "Bearer ") {
-				tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+			if after, ok :=strings.CutPrefix(authHeader, "Bearer "); ok  {
+				tokenString = after
 			}
 		}
 

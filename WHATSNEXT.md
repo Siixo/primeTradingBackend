@@ -1,14 +1,17 @@
 ### WHAT'S NEXT ?
 
-##Frontend dev
+## Frontend dev
+
 Register sends an error:
 duplicate key value violates unique constraint "user_pkey"
 
 Login sends an error:
 Error during login: SyntaxError: JSON.parse: unexpected character at line 1 column 1 of the JSON data
 
-##WIP:
-#Refresh token:
+## WIP:
+
+# Refresh token:
+
 Refresh token func written
 Need to implement service and handler
 Check incoming credentials (claims) and token
