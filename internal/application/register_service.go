@@ -3,7 +3,6 @@ package application
 import (
 	"backend/internal/domain/model"
 	"backend/internal/errors"
-	"backend/internal/handler/dto"
 	"backend/utils"
 	stdErrors "errors"
 
@@ -12,7 +11,7 @@ import (
 
 var V = utils.Validator{}
 
-func (s *UserService) Register(req dto.RegisterRequest) error {
+func (s *UserService) Register(req RegisterInput) error {
 	// Let's check if the data is valid
 	var errs errors.ValidationErrors
 

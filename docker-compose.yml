@@ -4,8 +4,10 @@ services:
   app:
     build: .
     container_name: go_app
+    env_file:
+      - .env
     ports:
-      - "80:8080"
+      - "8081:8080"
     environment:
       - HOST=0.0.0.0
       - PORT=8080
@@ -14,6 +16,10 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=password
       - DB_NAME=postgres
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,7 +33,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - "5444:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped

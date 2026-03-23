@@ -1,20 +1,18 @@
 # STAGE 1: Build
-FROM golang:1.25-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-# Installer git pour go mod
-RUN apk add --no-cache git
-
-# Copier go.mod et go.sum
+# Enable vendor mode (no network needed during build)
+# We copy the vendor directory created on the host
 COPY go.mod go.sum ./
-RUN go mod tidy
+COPY vendor/ ./vendor/
 
 # Copier tout le reste du code
 COPY . .
 
-# Build le binaire à partir du dossier cmd/server
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -a -installsuffix cgo -o /go/bin/app ./cmd/server
+# Build le binaire à partir du dossier cmd/server using the vendored dependencies
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -ldflags="-w -s" -a -installsuffix cgo -o /go/bin/app ./cmd/server
 
 # STAGE 2: Minimal image
 FROM scratch

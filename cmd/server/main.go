@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"backend/internal/adapters/alphavantage"
 	"backend/internal/adapters/postgres"
 	"backend/internal/application"
 	http "backend/internal/handler"
@@ -35,11 +36,27 @@ func main() {
 	defer db.Close()
 
 	userRepo := postgres.NewUserRepository(db)
-	_ = userRepo.Migrate()
+	if err := userRepo.Migrate(); err != nil {
+		log.Fatal("cannot run user migration: ", err)
+	}
+
+	commodityRepo := postgres.NewCommodityRepository(db)
+	if err := commodityRepo.Migrate(); err != nil {
+		log.Fatal("cannot run commodity migration: ", err)
+	}
+
+	correlationRepo := postgres.NewCorrelationRepository(db)
+	if err := correlationRepo.Migrate(); err != nil {
+		log.Fatal("cannot run correlation migration: ", err)
+	}
 
 	userService := application.NewUserService(userRepo)
-	stockService := application.NewStockService()
+	commodityService := application.NewCommodityService(alphavantage.NewClient(), commodityRepo)
 	userHandler := http.NewUserHandler(userService)
+	commodityHandler := http.NewCommodityHandler(commodityService)
+
+	correlationService := application.NewCorrelationService(correlationRepo, commodityRepo)
+	correlationHandler := http.NewCorrelationHandler(correlationService)
 
 	r := chi.NewRouter()
 
@@ -69,7 +86,11 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(authMiddleware.JWTAuthMiddleware)
 			r.Get("/me", userHandler.MeHandler)
-			r.Get("/stock", stockService.GetStocks)
+			r.Get("/commodity", commodityHandler.GetCommodityHandler)
+			r.Get("/commodity/{name}/history", commodityHandler.GetCommodityHistoryHandler)
+			r.Get("/commodity/status", commodityHandler.GetCommodityStatusHandler)
+			r.Get("/correlation", correlationHandler.GetCorrelationHandler)
+			r.Get("/correlation/history", correlationHandler.GetCorrelationHistoryHandler)
 		})
 
 		// Admin routes
@@ -78,20 +99,45 @@ func main() {
 		})
 	})
 
+	runUpdateCycle := func() {
+		log.Printf("Starting scheduled commodity refresh")
+
+		if err := commodityService.UpdatePreciousPrices(); err != nil {
+			log.Printf("Error updating precious commodities: %v", err)
+		}
+
+		if err := commodityService.UpdateIndustrialPrices(); err != nil {
+			log.Printf("Error updating industrial commodities: %v", err)
+		}
+
+		pairs := [][]string{
+			{"gold", "silver"},
+			{"copper", "aluminum"},
+			{"gold", "copper"},
+		}
+		for _, p := range pairs {
+			if err := correlationService.UpdateCorrelations(p[0], p[1]); err != nil {
+				log.Printf("Error updating correlation %s-%s: %v", p[0], p[1], err)
+			}
+		}
+
+		log.Printf("Finished scheduled commodity refresh")
+	}
+
+	// Prime the database immediately on startup so the UI has data before the first ticker tick.
+	runUpdateCycle()
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	go func() {
+		for range ticker.C {
+			runUpdateCycle()
+		}
+	}()
+
 	log.Println("server starting on :8080")
 	if err := stdhttp.ListenAndServe(fmt.Sprintf("%s:%s", os.Getenv("HOST"), os.Getenv("PORT")), r); err != nil {
 		log.Fatal(err)
-	}
-
-	ticker := time.NewTicker(3 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := stockService.UpdateMetalPrices(); err != nil {
-				log.Printf("Error updating metal prices: %v", err)
-			}
-		}
 	}
 }

@@ -1,8 +1,9 @@
-// internal/adapter/http/user_handler.go
+// internal/handler/user_handler.go
 package handler
 
 import (
 	"backend/internal/application"
+	"backend/internal/domain/model"
 	"backend/internal/handler/dto"
 	"backend/internal/middleware"
 	"encoding/json"
@@ -10,38 +11,46 @@ import (
 	"net/http"
 )
 
-type UserHandler struct {
-	userService *application.UserService
+// UserServicePort defines the contract the handler depends on.
+// This decouples the handler from the concrete *application.UserService.
+type UserServicePort interface {
+	Login(req application.LoginInput) (model.User, string, error)
+	Register(req application.RegisterInput) error
+	FindByID(id uint) (model.User, error)
+	RefreshToken(tokenString string) (string, error)
 }
 
-func NewUserHandler(userService *application.UserService) *UserHandler {
+type UserHandler struct {
+	userService UserServicePort
+}
+
+func NewUserHandler(userService UserServicePort) *UserHandler {
 	return &UserHandler{userService}
 }
 
 // Register handler for user registration
 func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
-
-	// Only allow POST method
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req dto.RegisterRequest
-
-	// Decode the request body
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// Call the service to register the user
-	if err := h.userService.Register(req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := h.userService.Register(application.RegisterInput{
+		Username:  req.Username,
+		Email:     req.Email,
+		Password:  req.Password,
+		Password2: req.Password2,
+	}); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Respond with success
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
@@ -49,43 +58,27 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 
 // Login handler for user login
 func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
-
-	// Only allow POST method
 	if r.Method != http.MethodPost {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req dto.LoginRequest
-
-	// Decode the request body
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// Call the service to login the user
-	user, token, err := h.userService.Login(req)
+	user, token, err := h.userService.Login(application.LoginInput{
+		Identifier: req.Identifier,
+		Password:   req.Password,
+	})
 	if err != nil {
-		log.Printf("Login error: %v", err) // Add this line for debugging
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		log.Printf("Login error: %v", err)
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Prepare the response without token since it's written in the cookie
-	response := dto.LoginResponse{
-		UserID:   user.ID,
-		Username: user.Username,
-		Email:    user.Email,
-	}
-
-	// Set the token in a secure HttpOnly cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "access_token",
 		Value:    token,
@@ -98,12 +91,15 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(dto.LoginResponse{
+		UserID:   user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+	})
 }
 
 // Logout handler for user logout
 func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) {
-	// Only allow POST method
 	http.SetCookie(w, &http.Cookie{
 		Name:     "access_token",
 		Value:    "",
@@ -116,59 +112,51 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Fetch current user info
+// MeHandler fetches the current authenticated user's info
 func (h *UserHandler) MeHandler(w http.ResponseWriter, r *http.Request) {
-	// Only allow GET method
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Fetch user info from the service
 	user, err := h.userService.FindByID(userID)
 	if err != nil {
-		http.Error(w, "User not found", http.StatusNotFound)
+		jsonError(w, "user not found", http.StatusNotFound)
 		return
 	}
 
-	// Prepare and send the response
-	response := dto.MeResponse{
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(dto.MeResponse{
 		UserID:   user.ID,
 		Username: user.Username,
 		Email:    user.Email,
-	}
-
-	// Send the response
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	})
 }
 
 func (h *UserHandler) RefreshJWTokenHandler(w http.ResponseWriter, r *http.Request) {
-	// Only allow POST method
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	cookie, err := r.Cookie("access_token")
 	if err != nil {
 		if err == http.ErrNoCookie {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			jsonError(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		jsonError(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	tokenStr := cookie.Value
-	newToken, err := h.userService.RefreshToken(tokenStr)
+	newToken, err := h.userService.RefreshToken(cookie.Value)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Set the token in a secure HttpOnly cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "access_token",
 		Value:    newToken,
@@ -181,5 +169,5 @@ func (h *UserHandler) RefreshJWTokenHandler(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Token refreshed successfully"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "token refreshed successfully"})
 }
