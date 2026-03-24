@@ -14,7 +14,7 @@ go mod vendor
 
 # 3. Build and Restart Containers
 echo "🏗️ Rebuilding and restarting containers..."
-docker-compose up -d --build
+docker compose up -d --build
 
 # 4. Cleanup
 echo "🧹 Cleaning up old images..."
