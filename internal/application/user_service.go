@@ -21,6 +21,12 @@ type RegisterInput struct {
 	Password2 string
 }
 
+type ChangePasswordInput struct {
+	UserID      uint
+	OldPassword string
+	NewPassword string
+}
+
 func NewUserService(userRepo repository.UserRepository) *UserService {
 	return &UserService{userRepo}
 }

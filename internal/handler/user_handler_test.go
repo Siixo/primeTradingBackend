@@ -62,6 +62,10 @@ func (f *fakeUserRepoHandler) FindByID(id uint) (model.User, error) {
 	return model.User{}, stdErrors.New(notFoundMsg)
 }
 
+func (f *fakeUserRepoHandler) UpdatePassword(id uint, hashedPassword string) error {
+	return nil
+}
+
 func newHandlerWithRepo(repo *fakeUserRepoHandler) *UserHandler {
 	svc := application.NewUserService(repo)
 	return NewUserHandler(svc)

@@ -101,6 +101,7 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(authMiddleware.JWTAuthMiddleware)
 			r.Get("/me", userHandler.MeHandler)
+			r.Post("/user/change-password", userHandler.ChangePasswordHandler)
 			r.Get("/commodity", commodityHandler.GetCommodityHandler)
 			r.Get("/commodity/{name}/history", commodityHandler.GetCommodityHistoryHandler)
 			r.Get("/commodity/status", commodityHandler.GetCommodityStatusHandler)

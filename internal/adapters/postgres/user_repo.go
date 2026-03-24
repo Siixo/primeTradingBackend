@@ -62,3 +62,9 @@ func (p *UserRepository) FindByID(id uint) (model.User, error) {
 	}
 	return user, nil
 }
+
+func (p *UserRepository) UpdatePassword(id uint, hashedPassword string) error {
+	query := `UPDATE users SET password=$1 WHERE id=$2`
+	_, err := p.db.Exec(query, hashedPassword, id)
+	return err
+}

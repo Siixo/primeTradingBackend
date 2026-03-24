@@ -41,3 +41,7 @@ func (f *fakeUserRepository) FindByID(id uint) (model.User, error) {
 	}
 	return model.User{}, nil
 }
+
+func (f *fakeUserRepository) UpdatePassword(id uint, hashedPassword string) error {
+	return nil
+}

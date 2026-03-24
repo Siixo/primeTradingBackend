@@ -20,6 +20,7 @@ type UserServicePort interface {
 	Register(req application.RegisterInput) error
 	FindByID(id uint) (model.User, error)
 	RefreshToken(tokenString string) (string, error)
+	ChangePassword(req application.ChangePasswordInput) error
 }
 
 type UserHandler struct {
@@ -135,6 +136,42 @@ func (h *UserHandler) MeHandler(w http.ResponseWriter, r *http.Request) {
 		Username: user.Username,
 		Email:    user.Email,
 	})
+}
+
+// ChangePasswordHandler updates the user password
+func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	if !ok {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.userService.ChangePassword(application.ChangePasswordInput{
+		UserID:      userID,
+		OldPassword: req.OldPassword,
+		NewPassword: req.NewPassword,
+	}); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "password updated successfully"})
 }
 
 func (h *UserHandler) RefreshJWTokenHandler(w http.ResponseWriter, r *http.Request) {
