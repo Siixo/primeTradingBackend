@@ -42,7 +42,7 @@ func (s *CommodityService) GetCommodityByType(commodityType string) (*model.Comm
 	}
 
 	commodity := strings.ToLower(commodityType)
-	if commodity != "gold" && commodity != "silver" && commodity != "copper" && commodity != "aluminum" {
+	if commodity != "gold" && commodity != "silver" && commodity != "copper" && commodity != "aluminum" && commodity != "brent" {
 		return nil, errors.New("unknown commodity type")
 	}
 
@@ -61,7 +61,7 @@ func (s *CommodityService) UpdatePreciousPrices() error {
 }
 
 func (s *CommodityService) UpdateIndustrialPrices() error {
-	return s.updateSymbols([]string{"copper", "aluminum"})
+	return s.updateSymbols([]string{"copper", "aluminum", "brent"})
 }
 
 // UpdateMetalPrices is kept for compatibility and executes both update groups.
@@ -113,7 +113,7 @@ func (s *CommodityService) updateSymbols(symbols []string) error {
 }
 
 func (s *CommodityService) GetStatuses() ([]model.CommodityStatus, error) {
-	symbols := []string{"gold", "silver", "copper", "aluminum"}
+	symbols := []string{"gold", "silver", "copper", "aluminum", "brent"}
 	statuses := make([]model.CommodityStatus, 0, len(symbols))
 
 	for _, symbol := range symbols {
@@ -144,7 +144,7 @@ func sourceFor(symbol string) string {
 	switch symbol {
 	case "gold", "silver":
 		return "goldpricez"
-	case "copper", "aluminum":
+	case "copper", "aluminum", "brent":
 		return "Yahoo Finance"
 	default:
 		return "alphavantage"

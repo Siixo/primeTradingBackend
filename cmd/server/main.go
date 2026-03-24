@@ -130,6 +130,8 @@ func main() {
 			{"gold", "silver"},
 			{"copper", "aluminum"},
 			{"gold", "copper"},
+			{"gold", "brent"},
+			{"copper", "brent"},
 		}
 		for _, p := range pairs {
 			if err := correlationService.UpdateCorrelations(p[0], p[1]); err != nil {

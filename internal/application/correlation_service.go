@@ -62,18 +62,34 @@ func (s *CorrelationService) UpdateCorrelations(commodityA, commodityB string) e
 	// Aligned data
 	var x []float64
 	var y []float64
-	
+
 	// Fast lookup for historyB by date
-	mapB := make(map[string]float64)
+	mapBIntraday := make(map[string]float64)
+	mapBDaily := make(map[string]float64)
 	for _, c := range historyB {
-		// Use date only for alignment (especially for daily data like Brent)
-		dateKey := c.Date.Format("2006-01-02")
-		mapB[dateKey] = c.PriceKg
+		dateStr := c.Date.Format("2006-01-02")
+		// If it's pure daily data (00:00), store in daily map
+		if c.Date.Hour() == 0 && c.Date.Minute() == 0 {
+			mapBDaily[dateStr] = c.PriceKg
+		} else {
+			// Otherwise store in intraday map (minute precision)
+			mapBIntraday[c.Date.Format("2006-01-02 15:04")] = c.PriceKg
+		}
 	}
 	
 	for _, c := range historyA {
-		dateKey := c.Date.Format("2006-01-02")
-		if valB, ok := mapB[dateKey]; ok {
+		dateStr := c.Date.Format("2006-01-02")
+		timeStr := c.Date.Format("2006-01-02 15:04")
+		
+		// 1. Try exact intraday match
+		if valB, ok := mapBIntraday[timeStr]; ok {
+			x = append(x, c.PriceKg)
+			y = append(y, valB)
+			continue
+		}
+		
+		// 2. Fallback to daily match if one or both are daily-only
+		if valB, ok := mapBDaily[dateStr]; ok {
 			x = append(x, c.PriceKg)
 			y = append(y, valB)
 		}

@@ -11,12 +11,13 @@ import (
 )
 
 const (
-	chartURLFormat = "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=1mo"
+	chartURLFormat = "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=5m&range=1d"
 	userAgent      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 	
 	// Conversion factors to KG
 	metricTonToKg = 1000.0
 	lbToKg        = 0.453592
+	barrelToKg    = 136.0 // Approximate for Brent Oil
 )
 
 type Client struct {
@@ -106,6 +107,9 @@ func (c *Client) FetchPrice(commodity string) (*model.Commodity, error) {
 	case "ALI=F":
 		// Aluminum futures are in Dollars per metric ton
 		priceKg = price / metricTonToKg
+	case "BZ=F":
+		// Brent Oil is in Dollars per barrel
+		priceKg = price / barrelToKg
 	}
 
 	return &model.Commodity{
@@ -127,6 +131,8 @@ func (c *Client) getTickerFor(commodity string) string {
 		return "HG=F"
 	case "aluminum", "aluminium":
 		return "ALI=F"
+	case "brent":
+		return "BZ=F"
 	default:
 		return ""
 	}
