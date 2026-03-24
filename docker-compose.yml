@@ -7,15 +7,15 @@ services:
     env_file:
       - .env
     ports:
-      - "8081:8080"
+      - "${PORT:-8080}:8080"
     environment:
       - HOST=0.0.0.0
       - PORT=8080
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=password
-      - DB_NAME=postgres
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
     dns:
       - 1.1.1.1
@@ -29,11 +29,11 @@ services:
     image: postgres:16-alpine
     container_name: postgres_db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: postgres
-    ports:
-      - "5444:5432"
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    # Port 5432 is still available to the 'app' service within the Docker network
+    # but no longer exposed to the host machine for security.
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped

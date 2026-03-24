@@ -8,7 +8,9 @@ import (
 	"os"
 	"time"
 
+	"backend/internal/adapters"
 	"backend/internal/adapters/alphavantage"
+	"backend/internal/adapters/yahoofinance"
 	"backend/internal/adapters/postgres"
 	"backend/internal/application"
 	http "backend/internal/handler"
@@ -51,7 +53,17 @@ func main() {
 	}
 
 	userService := application.NewUserService(userRepo)
-	commodityService := application.NewCommodityService(alphavantage.NewClient(), commodityRepo)
+	
+	// Composite provider to route different commodites to different backends
+	alphaClient := alphavantage.NewClient()
+	yahooClient := yahoofinance.NewClient()
+	
+	provider := adapters.NewCompositeProvider(alphaClient)
+	provider.Register("copper", yahooClient)
+	provider.Register("aluminum", yahooClient)
+	provider.Register("aluminium", yahooClient)
+	
+	commodityService := application.NewCommodityService(provider, commodityRepo)
 	userHandler := http.NewUserHandler(userService)
 	commodityHandler := http.NewCommodityHandler(commodityService)
 

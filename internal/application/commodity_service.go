@@ -42,7 +42,7 @@ func (s *CommodityService) GetCommodityByType(commodityType string) (*model.Comm
 	}
 
 	commodity := strings.ToLower(commodityType)
-	if commodity != "gold" && commodity != "silver" {
+	if commodity != "gold" && commodity != "silver" && commodity != "copper" && commodity != "aluminum" {
 		return nil, errors.New("unknown commodity type")
 	}
 
@@ -144,6 +144,8 @@ func sourceFor(symbol string) string {
 	switch symbol {
 	case "gold", "silver":
 		return "goldpricez"
+	case "copper", "aluminum":
+		return "Yahoo Finance"
 	default:
 		return "alphavantage"
 	}
