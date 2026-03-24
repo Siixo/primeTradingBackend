@@ -14,7 +14,9 @@ go mod vendor
 
 # 3. Build and Restart Containers
 echo "🏗️ Rebuilding and restarting containers..."
-docker-compose up -d --build
+# NOTE: We use "docker compose" (with a space) to avoid the KeyError: 'ContainerConfig'
+# which is a known bug in the old docker-compose v1.
+docker compose up -d --build
 
 # 4. Cleanup
 echo "🧹 Cleaning up old images..."
