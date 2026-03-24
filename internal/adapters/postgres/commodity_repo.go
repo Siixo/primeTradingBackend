@@ -33,7 +33,11 @@ func (p *CommodityRepository) Migrate() error {
 func (p *CommodityRepository) Save(stock model.Commodity) error {
 	query := `INSERT INTO commodities (name, date, price_kg, unit, fetched_at) 
 			  VALUES ($1, $2, $3, $4, $5) 
-			  ON CONFLICT DO NOTHING` // Or update if needed, but for history 'DO NOTHING' or just insert is common.
+			  ON CONFLICT (name, date) 
+			  DO UPDATE SET 
+			  	price_kg = EXCLUDED.price_kg,
+			  	unit = EXCLUDED.unit,
+			  	fetched_at = EXCLUDED.fetched_at`
 	_, err := p.db.Exec(query, stock.Name, stock.Date, stock.PriceKg, stock.Unit, stock.FetchedAt)
 	return err
 }
