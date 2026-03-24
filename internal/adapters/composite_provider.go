@@ -38,3 +38,13 @@ func (c *CompositeProvider) FetchCommodity() (*model.Commodity, error) {
 	}
 	return nil, fmt.Errorf("no default provider for FetchCommodity")
 }
+
+func (c *CompositeProvider) FetchHistory(commodity string) ([]model.Commodity, error) {
+	if pr, ok := c.providers[commodity]; ok {
+		return pr.FetchHistory(commodity)
+	}
+	if c.defaultPr != nil {
+		return c.defaultPr.FetchHistory(commodity)
+	}
+	return nil, fmt.Errorf("no provider registered for FetchHistory for: %s", commodity)
+}

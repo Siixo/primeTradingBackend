@@ -22,7 +22,8 @@ func (p *CommodityRepository) Migrate() error {
 		date 			TIMESTAMP NOT NULL,
 		price_kg 			FLOAT,
 		unit 			VARCHAR(50) NOT NULL,
-		fetched_at 			TIMESTAMP NOT NULL DEFAULT NOW()
+		fetched_at 			TIMESTAMP NOT NULL DEFAULT NOW(),
+		UNIQUE(name, date)
 	);`
 
 	_, err := p.db.Exec(query)

@@ -14,6 +14,7 @@ import (
 // Implementations live in the adapters layer (e.g. adapters/goldpricez).
 type MetalPriceProvider interface {
 	FetchPrice(metal string) (*model.Commodity, error)
+	FetchHistory(symbol string) ([]model.Commodity, error)
 	FetchCommodity() (*model.Commodity, error)
 }
 
@@ -80,6 +81,21 @@ func (s *CommodityService) updateSymbols(symbols []string) error {
 	successes := 0
 	var failed []string
 	for _, symbol := range symbols {
+		// First, try to fetch the historical points (e.g. last 24h)
+		history, err := s.priceProvider.FetchHistory(symbol)
+		if err == nil && len(history) > 0 {
+			for _, c := range history {
+				if err := s.commodityRepo.Save(c); err != nil {
+					// Ignore individual save errors (e.g. duplicate key)
+					continue
+				}
+			}
+			s.clearLastError(symbol)
+			successes++
+			continue
+		}
+
+		// Fallback to single price fetch if history fails or isn't supported
 		commodity, err := s.priceProvider.FetchPrice(symbol)
 		if err != nil {
 			s.setLastError(symbol, err)
@@ -142,9 +158,7 @@ func (s *CommodityService) GetStatuses() ([]model.CommodityStatus, error) {
 
 func sourceFor(symbol string) string {
 	switch symbol {
-	case "gold", "silver":
-		return "goldpricez"
-	case "copper", "aluminum", "brent":
+	case "gold", "silver", "copper", "aluminum", "brent":
 		return "Yahoo Finance"
 	default:
 		return "alphavantage"

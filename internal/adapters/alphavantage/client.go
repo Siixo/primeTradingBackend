@@ -88,6 +88,11 @@ func (c *Client) FetchCommodity() (*model.Commodity, error) {
 	return nil, errors.New("use FetchPrice with specific symbol")
 }
 
+func (c *Client) FetchHistory(symbol string) ([]model.Commodity, error) {
+	// Alphavantage history fetching is complex and slow; for now we skip bulk backfill
+	return nil, errors.New("FetchHistory not implemented for AlphaVantage")
+}
+
 func (c *Client) fetchPreciousMetal(metal string) (*model.Commodity, error) {
 	if c.goldPricezAPIKey == "" {
 		return nil, errors.New("missing GOLD_PRICEZ_API_KEY")
