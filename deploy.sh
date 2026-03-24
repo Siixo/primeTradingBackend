@@ -12,11 +12,13 @@ echo "📦 Updating dependencies..."
 go mod tidy
 go mod vendor
 
-# 3. Build and Restart Containers
-echo "🏗️ Rebuilding and restarting containers..."
-# NOTE: We use "docker compose" (with a space) to avoid the KeyError: 'ContainerConfig'
-# which is a known bug in the old docker-compose v1.
-docker compose up -d --build
+# 3. Force Cleanup and Rebuild
+echo "🏗️  Removing existing containers and rebuilding..."
+# This step helps avoid the 'ContainerConfig' error in old docker-compose v1
+# by ensuring we start with a clean state.
+docker-compose down || true
+docker rm -f go_app postgres_db || true
+docker-compose up -d --build
 
 # 4. Cleanup
 echo "🧹 Cleaning up old images..."
