@@ -35,7 +35,7 @@ func (s *UserService) Login(req LoginInput) (model.User, string, error) {
 		log.Printf("Error generating JWT token: %v", err)
 		return model.User{}, "", err
 	}
-	log.Printf("Token generated for user %s: %s", user.Username, token)
+	log.Printf("Token generated for user %s", user.Username)
 
 	return user, token, nil
 }

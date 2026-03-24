@@ -6,12 +6,13 @@ import (
 	"log"
 	stdhttp "net/http"
 	"os"
+	"strings"
 	"time"
 
 	"backend/internal/adapters"
 	"backend/internal/adapters/alphavantage"
-	"backend/internal/adapters/yahoofinance"
 	"backend/internal/adapters/postgres"
+	"backend/internal/adapters/yahoofinance"
 	"backend/internal/application"
 	http "backend/internal/handler"
 
@@ -30,8 +31,9 @@ func main() {
 	dbUser := os.Getenv("DB_USER")
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := os.Getenv("DB_NAME")
+	dbSSLMode := getEnv("DB_SSLMODE", "disable")
 
-	db, err := postgres.NewPostgresDB(dbHost, dbPort, dbUser, dbPassword, dbName)
+	db, err := postgres.NewPostgresDB(dbHost, dbPort, dbUser, dbPassword, dbName, dbSSLMode)
 	if err != nil {
 		log.Fatal("cannot connect to database: ", err)
 	}
@@ -71,9 +73,10 @@ func main() {
 	correlationHandler := http.NewCorrelationHandler(correlationService)
 
 	r := chi.NewRouter()
+	allowedOrigins := getAllowedOrigins()
 
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3100", "http://127.0.0.1:3100", "https://primetrading-nine.vercel.app"},
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		AllowCredentials: true,
@@ -152,4 +155,40 @@ func main() {
 	if err := stdhttp.ListenAndServe(fmt.Sprintf("%s:%s", os.Getenv("HOST"), os.Getenv("PORT")), r); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func getEnv(key, fallback string) string {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	return v
+}
+
+func getAllowedOrigins() []string {
+	configured := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if configured == "" {
+		return []string{
+			"http://localhost:3100",
+			"http://127.0.0.1:3100",
+			"https://primetrading-nine.vercel.app",
+			"http://129.151.247.163:3100", // Your Oracle Server (Frontend port)
+			"http://129.151.247.163",      // Your Oracle Server (Public IP)
+		}
+	}
+
+	parts := strings.Split(configured, ",")
+	origins := make([]string, 0, len(parts))
+	for _, p := range parts {
+		origin := strings.TrimSpace(p)
+		if origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+
+	if len(origins) == 0 {
+		return []string{"http://localhost:3100", "http://127.0.0.1:3100"}
+	}
+
+	return origins
 }

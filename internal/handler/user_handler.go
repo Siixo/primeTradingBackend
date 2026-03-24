@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 )
 
 // UserServicePort defines the contract the handler depends on.
@@ -84,7 +86,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   secureCookieEnabled(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   3600,
 	})
@@ -105,7 +107,7 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   secureCookieEnabled(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
@@ -162,7 +164,7 @@ func (h *UserHandler) RefreshJWTokenHandler(w http.ResponseWriter, r *http.Reque
 		Value:    newToken,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   secureCookieEnabled(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   3600,
 	})
@@ -170,4 +172,9 @@ func (h *UserHandler) RefreshJWTokenHandler(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "token refreshed successfully"})
+}
+
+func secureCookieEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SECURE")))
+	return v == "1" || v == "true" || v == "yes"
 }
