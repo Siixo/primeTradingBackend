@@ -85,6 +85,7 @@ func main() {
 	r.Use(c.Handler)
 
 	r.Use(middleware.Logger)
+	r.Use(authMiddleware.CSRFMiddleware)
 
 	r.Get("/health", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		w.Write([]byte("OK"))
