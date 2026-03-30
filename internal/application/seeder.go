@@ -11,7 +11,7 @@ import (
 func RunCommoditySeeder(repo repository.CommodityRepository) {
 	// Check if we need to seed
 	count, err := repo.GetTotalCount()
-	if err != nil || count > 0 {
+	if err != nil || count > 10 {
 		return // Already seeded or error
 	}
 
