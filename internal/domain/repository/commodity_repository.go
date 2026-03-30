@@ -7,4 +7,5 @@ type CommodityRepository interface {
 	Save(stock model.Commodity) error
 	GetLatestPrice(commodity string) (model.Commodity, error)
 	GetPriceHistory(commodity string, limit int) ([]model.Commodity, error)
+	GetTotalCount() (int, error)
 }

@@ -4,15 +4,13 @@ import (
 	authMiddleware "backend/internal/middleware"
 	"fmt"
 	"log"
-	stdhttp "net/http"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"backend/internal/adapters"
 	"backend/internal/adapters/alphavantage"
 	"backend/internal/adapters/postgres"
-	"backend/internal/adapters/yahoofinance"
 	"backend/internal/application"
 	http "backend/internal/handler"
 
@@ -49,6 +47,9 @@ func main() {
 		log.Fatal("cannot run commodity migration: ", err)
 	}
 
+	// Seed 1 year of POC historical data
+	application.RunCommoditySeeder(commodityRepo)
+
 	correlationRepo := postgres.NewCorrelationRepository(db)
 	if err := correlationRepo.Migrate(); err != nil {
 		log.Fatal("cannot run correlation migration: ", err)
@@ -56,16 +57,10 @@ func main() {
 
 	userService := application.NewUserService(userRepo)
 	
-	// Composite provider to route different commodites to different backends
+	// Route all live data through AlphaVantage/GoldPriceZ since Yahoo is rate-limiting
 	alphaClient := alphavantage.NewClient()
-	yahooClient := yahoofinance.NewClient()
 	
-	provider := adapters.NewCompositeProvider(alphaClient)
-	provider.Register("copper", yahooClient)
-	provider.Register("aluminum", yahooClient)
-	provider.Register("aluminium", yahooClient)
-	
-	commodityService := application.NewCommodityService(provider, commodityRepo)
+	commodityService := application.NewCommodityService(alphaClient, commodityRepo)
 	userHandler := http.NewUserHandler(userService)
 	commodityHandler := http.NewCommodityHandler(commodityService)
 

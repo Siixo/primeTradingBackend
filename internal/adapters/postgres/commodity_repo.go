@@ -76,3 +76,9 @@ func (p *CommodityRepository) GetPriceHistory(commodity string, limit int) ([]mo
 	}
 	return history, nil
 }
+
+func (p *CommodityRepository) GetTotalCount() (int, error) {
+	var count int
+	err := p.db.QueryRow("SELECT COUNT(*) FROM commodities").Scan(&count)
+	return count, err
+}
