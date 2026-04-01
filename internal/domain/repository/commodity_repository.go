@@ -8,4 +8,5 @@ type CommodityRepository interface {
 	GetLatestPrice(commodity string) (model.Commodity, error)
 	GetPriceHistory(commodity string, limit int) ([]model.Commodity, error)
 	GetTotalCount() (int, error)
+	HasRecentData() (bool, error)
 }

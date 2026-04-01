@@ -82,3 +82,13 @@ func (p *CommodityRepository) GetTotalCount() (int, error) {
 	err := p.db.QueryRow("SELECT COUNT(*) FROM commodities").Scan(&count)
 	return count, err
 }
+
+func (p *CommodityRepository) HasRecentData() (bool, error) {
+	var count int
+	// Check for any data in the last 48 hours
+	err := p.db.QueryRow("SELECT COUNT(*) FROM commodities WHERE date > NOW() - INTERVAL '2 days'").Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

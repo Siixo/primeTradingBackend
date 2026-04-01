@@ -9,13 +9,14 @@ import (
 )
 
 func RunCommoditySeeder(repo repository.CommodityRepository) {
-	// Check if we need to seed
-	count, err := repo.GetTotalCount()
-	if err != nil || count > 10 {
-		return // Already seeded or error
+	// Simple check: do we have any data from the last 48 hours?
+	// If not, we probably need a seed or help.
+	recent, err := repo.HasRecentData()
+	if err == nil && recent {
+		return // We have recent data, don't re-seed
 	}
 
-	log.Println("Database is empty. Seeding 1 year of historical commodity data for POC...")
+	log.Println("No recent data found. Seeding 1 year of historical commodity data for POC...")
 
 	startDate := time.Now().AddDate(-1, 0, 0)
 	daysToSeed := 365

@@ -158,10 +158,12 @@ func (s *CommodityService) GetStatuses() ([]model.CommodityStatus, error) {
 
 func sourceFor(symbol string) string {
 	switch symbol {
-	case "gold", "silver", "copper", "aluminum", "brent":
-		return "Yahoo Finance"
+	case "gold", "silver":
+		return "GoldPriceZ"
+	case "copper", "aluminum", "brent":
+		return "AlphaVantage"
 	default:
-		return "alphavantage"
+		return "Official API"
 	}
 }
 
