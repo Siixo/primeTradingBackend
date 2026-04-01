@@ -68,6 +68,11 @@ func (h *CommodityHandler) GetCommodityHistoryHandler(w http.ResponseWriter, r *
 		return
 	}
 
+	// Ensure we return [] instead of null for empty results
+	if history == nil {
+		history = []model.Commodity{}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(history); err != nil {
 		jsonError(w, "failed to encode response", http.StatusInternalServerError)
