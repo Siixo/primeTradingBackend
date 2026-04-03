@@ -14,11 +14,12 @@ import (
 	"backend/internal/application"
 	http "backend/internal/handler"
 
+	"net/url"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
-	"net/url"
 )
 
 func main() {
@@ -29,6 +30,8 @@ func main() {
 
 	// Check if DATABASE_URL is set (e.g., by Railway, Heroku, etc.)
 	databaseURL := os.Getenv("DATABASE_URL")
+	log.Printf("DEBUG: DATABASE_URL=%v (empty=%v)", databaseURL != "", databaseURL == "")
+	
 	if databaseURL != "" {
 		// Parse DATABASE_URL format: postgres://user:password@host:port/dbname?sslmode=require
 		u, err := url.Parse(databaseURL)
