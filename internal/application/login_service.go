@@ -27,8 +27,6 @@ func (s *UserService) Login(req LoginInput) (model.User, string, error) {
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		return model.User{}, "", stdErrors.New("invalid credentials")
 	}
-	log.Printf("Password is correct for user: %s", user.Username)
-
 	//Token generation
 	token, err := auth.GenerateJWTToken(user.ID, user.Username, user.Role)
 	if err != nil {

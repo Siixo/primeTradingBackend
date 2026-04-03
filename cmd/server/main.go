@@ -30,7 +30,6 @@ func main() {
 
 	// Check if DATABASE_URL is set (e.g., by Railway, Heroku, etc.)
 	databaseURL := os.Getenv("DATABASE_URL")
-	log.Printf("DEBUG: DATABASE_URL=%v (empty=%v)", databaseURL != "", databaseURL == "")
 	
 	if databaseURL != "" {
 		// Parse DATABASE_URL format: postgres://user:password@host:port/dbname?sslmode=require
@@ -64,7 +63,7 @@ func main() {
 			dbSSLMode = "disable"
 		}
 
-		log.Printf("Parsed DATABASE_URL: host=%s port=%s user=%s dbname=%s sslmode=%s", dbHost, dbPort, dbUser, dbName, dbSSLMode)
+		log.Printf("Parsed DATABASE_URL: host=%s port=%s dbname=%s sslmode=%s", dbHost, dbPort, dbName, dbSSLMode)
 	} else {
 		// Fallback to individual env vars (local development)
 		dbHost = os.Getenv("DB_HOST")
@@ -215,8 +214,6 @@ func getAllowedOrigins() []string {
 			"http://localhost:3100",
 			"http://127.0.0.1:3100",
 			"https://primetrading-nine.vercel.app",
-			"http://129.151.247.163:3100", // Your Oracle Server (Frontend port)
-			"http://129.151.247.163",      // Your Oracle Server (Public IP)
 		}
 	}
 
