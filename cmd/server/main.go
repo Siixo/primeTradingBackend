@@ -18,18 +18,48 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
+	"net/url"
 )
 
 func main() {
 	// Loading .env file
 	godotenv.Load()
 
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbUser := os.Getenv("DB_USER")
-	dbPassword := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-	dbSSLMode := getEnv("DB_SSLMODE", "disable")
+	var dbHost, dbPort, dbUser, dbPassword, dbName, dbSSLMode string
+
+	// Check if DATABASE_URL is set (e.g., by Railway, Heroku, etc.)
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL != "" {
+		// Parse DATABASE_URL format: postgres://user:password@host:port/dbname?sslmode=require
+		u, err := url.Parse(databaseURL)
+		if err != nil {
+			log.Fatal("Failed to parse DATABASE_URL: ", err)
+		}
+
+		dbHost = u.Hostname()
+		dbPort = u.Port()
+		if dbPort == "" {
+			dbPort = "5432" // default PostgreSQL port
+		}
+
+		dbUser = u.User.Username()
+		dbPassword, _ = u.User.Password()
+		dbName = strings.TrimPrefix(u.Path, "/")
+
+		// Check query params for sslmode
+		dbSSLMode = u.Query().Get("sslmode")
+		if dbSSLMode == "" {
+			dbSSLMode = "disable"
+		}
+	} else {
+		// Fallback to individual env vars (local development)
+		dbHost = os.Getenv("DB_HOST")
+		dbPort = os.Getenv("DB_PORT")
+		dbUser = os.Getenv("DB_USER")
+		dbPassword = os.Getenv("DB_PASSWORD")
+		dbName = os.Getenv("DB_NAME")
+		dbSSLMode = getEnv("DB_SSLMODE", "disable")
+	}
 
 	db, err := postgres.NewPostgresDB(dbHost, dbPort, dbUser, dbPassword, dbName, dbSSLMode)
 	if err != nil {
