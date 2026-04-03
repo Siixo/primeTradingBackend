@@ -36,9 +36,18 @@ func main() {
 			log.Fatal("Failed to parse DATABASE_URL: ", err)
 		}
 
-		dbHost = u.Hostname()
-		dbPort = u.Port()
-		if dbPort == "" {
+		// Extract host and port more robustly
+		hostPort := u.Host
+		if hostPort == "" {
+			log.Fatal("DATABASE_URL has no host")
+		}
+
+		// Split host and port manually (url.Port() sometimes fails)
+		parts := strings.Split(hostPort, ":")
+		dbHost = parts[0]
+		if len(parts) > 1 {
+			dbPort = parts[1]
+		} else {
 			dbPort = "5432" // default PostgreSQL port
 		}
 
@@ -51,6 +60,8 @@ func main() {
 		if dbSSLMode == "" {
 			dbSSLMode = "disable"
 		}
+
+		log.Printf("Parsed DATABASE_URL: host=%s port=%s user=%s dbname=%s sslmode=%s", dbHost, dbPort, dbUser, dbName, dbSSLMode)
 	} else {
 		// Fallback to individual env vars (local development)
 		dbHost = os.Getenv("DB_HOST")
