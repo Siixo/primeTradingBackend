@@ -2,12 +2,12 @@ package alphavantage
 
 import (
 	"backend/internal/domain/model"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,16 +26,18 @@ const (
 )
 
 type Client struct {
+	httpClient         *http.Client
 	alphaVantageAPIKey string
 	goldPricezAPIKey   string
 	alphaVantageMu     sync.Mutex
 	lastAlphaCallAt    time.Time
 }
 
-func NewClient() *Client {
+func NewClient(httpClient *http.Client, alphaVantageKey, goldPricezKey string) *Client {
 	return &Client{
-		alphaVantageAPIKey: os.Getenv("ALPHA_VANTAGE_API_KEY"),
-		goldPricezAPIKey:   os.Getenv("GOLD_PRICEZ_API_KEY"),
+		httpClient:         httpClient,
+		alphaVantageAPIKey: alphaVantageKey,
+		goldPricezAPIKey:   goldPricezKey,
 	}
 }
 
@@ -70,41 +72,31 @@ type GoldPricezRates struct {
 	GMTUpdated               string `json:"gmt_ounce_price_usd_updated"`
 }
 
-func (c *Client) FetchPrice(symbol string) (*model.Commodity, error) {
+func (c *Client) FetchPrice(ctx context.Context, symbol string) (*model.Commodity, error) {
 	s := strings.ToLower(symbol)
 	
 	switch s {
 	case "gold", "silver":
-		return c.fetchPreciousMetal(s)
+		return c.fetchPreciousMetal(ctx, s)
 	case "copper", "brent", "aluminum", "aluminium":
-		return c.fetchIndustrialCommodity(s)
+		return c.fetchIndustrialCommodity(ctx, s)
 	default:
 		return nil, fmt.Errorf("unsupported symbol: %s", symbol)
 	}
 }
 
-// FetchCommodity satisfies the interface but we'll use FetchPrice for specific symbols
-func (c *Client) FetchCommodity() (*model.Commodity, error) {
-	return nil, errors.New("use FetchPrice with specific symbol")
-}
-
-func (c *Client) FetchHistory(symbol string) ([]model.Commodity, error) {
-	// Alphavantage history fetching is complex and slow; for now we skip bulk backfill
-	return nil, errors.New("FetchHistory not implemented for AlphaVantage")
-}
-
-func (c *Client) fetchPreciousMetal(metal string) (*model.Commodity, error) {
+func (c *Client) fetchPreciousMetal(ctx context.Context, metal string) (*model.Commodity, error) {
 	if c.goldPricezAPIKey == "" {
 		return nil, errors.New("missing GOLD_PRICEZ_API_KEY")
 	}
 
-	req, err := http.NewRequest(http.MethodGet, goldPricezURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, goldPricezURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("X-API-KEY", c.goldPricezAPIKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +156,7 @@ func (c *Client) fetchPreciousMetal(metal string) (*model.Commodity, error) {
 	}, nil
 }
 
-func (c *Client) fetchIndustrialCommodity(commodity string) (*model.Commodity, error) {
+func (c *Client) fetchIndustrialCommodity(ctx context.Context, commodity string) (*model.Commodity, error) {
 	function := strings.ToUpper(commodity)
 	if function == "ALUMINIUM" {
 		function = "ALUMINUM"
@@ -176,9 +168,14 @@ func (c *Client) fetchIndustrialCommodity(commodity string) (*model.Commodity, e
 
 	c.waitForAlphaVantageSlot()
 
-	url := fmt.Sprintf("%s?function=%s&apikey=%s", baseURL, function, c.alphaVantageAPIKey)
+	reqURL := fmt.Sprintf("%s?function=%s&apikey=%s", baseURL, function, c.alphaVantageAPIKey)
 	
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

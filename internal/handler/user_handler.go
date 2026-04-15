@@ -6,32 +6,30 @@ import (
 	"backend/internal/domain/model"
 	"backend/internal/handler/dto"
 	"backend/internal/middleware"
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
-	"strings"
 )
 
 // UserServicePort defines the contract the handler depends on.
-// This decouples the handler from the concrete *application.UserService.
 type UserServicePort interface {
-	Login(req application.LoginInput) (model.User, string, error)
-	Register(req application.RegisterInput) error
-	FindByID(id uint) (model.User, error)
+	Login(ctx context.Context, req application.LoginInput) (model.User, string, error)
+	Register(ctx context.Context, req application.RegisterInput) error
+	FindByID(ctx context.Context, id uint) (model.User, error)
 	RefreshToken(tokenString string) (string, error)
-	ChangePassword(req application.ChangePasswordInput) error
+	ChangePassword(ctx context.Context, req application.ChangePasswordInput) error
 }
 
 type UserHandler struct {
-	userService UserServicePort
+	userService  UserServicePort
+	cookieSecure bool
 }
 
-func NewUserHandler(userService UserServicePort) *UserHandler {
-	return &UserHandler{userService}
+func NewUserHandler(userService UserServicePort, cookieSecure bool) *UserHandler {
+	return &UserHandler{userService: userService, cookieSecure: cookieSecure}
 }
 
-// Register handler for user registration
 func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -44,7 +42,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.userService.Register(application.RegisterInput{
+	if err := h.userService.Register(r.Context(), application.RegisterInput{
 		Username:  req.Username,
 		Email:     req.Email,
 		Password:  req.Password,
@@ -59,7 +57,6 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
 }
 
-// Login handler for user login
 func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -72,7 +69,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, token, err := h.userService.Login(application.LoginInput{
+	user, token, err := h.userService.Login(r.Context(), application.LoginInput{
 		Identifier: req.Identifier,
 		Password:   req.Password,
 	})
@@ -87,7 +84,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secureCookieEnabled(),
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   3600,
 	})
@@ -101,21 +98,19 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Logout handler for user logout
 func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "access_token",
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secureCookieEnabled(),
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// MeHandler fetches the current authenticated user's info
 func (h *UserHandler) MeHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	if !ok {
@@ -123,7 +118,7 @@ func (h *UserHandler) MeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.userService.FindByID(userID)
+	user, err := h.userService.FindByID(r.Context(), userID)
 	if err != nil {
 		jsonError(w, "user not found", http.StatusNotFound)
 		return
@@ -138,7 +133,6 @@ func (h *UserHandler) MeHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ChangePasswordHandler updates the user password
 func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -160,7 +154,7 @@ func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.userService.ChangePassword(application.ChangePasswordInput{
+	if err := h.userService.ChangePassword(r.Context(), application.ChangePasswordInput{
 		UserID:      userID,
 		OldPassword: req.OldPassword,
 		NewPassword: req.NewPassword,
@@ -201,7 +195,7 @@ func (h *UserHandler) RefreshJWTokenHandler(w http.ResponseWriter, r *http.Reque
 		Value:    newToken,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secureCookieEnabled(),
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   3600,
 	})
@@ -209,9 +203,4 @@ func (h *UserHandler) RefreshJWTokenHandler(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "token refreshed successfully"})
-}
-
-func secureCookieEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SECURE")))
-	return v == "1" || v == "true" || v == "yes"
 }

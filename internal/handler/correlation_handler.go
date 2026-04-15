@@ -2,6 +2,7 @@ package handler
 
 import (
 	"backend/internal/domain/model"
+	"context"
 	"encoding/json"
 	"math"
 	"net/http"
@@ -9,8 +10,8 @@ import (
 )
 
 type CorrelationServicePort interface {
-	GetCorrelationByType(correlationType string) (*model.Correlation, error)
-	GetHistory(commodityA, commodityB string, limit int) ([]*model.Correlation, error)
+	GetCorrelationByType(ctx context.Context, correlationType string) (*model.Correlation, error)
+	GetHistory(ctx context.Context, commodityA, commodityB string, limit int) ([]*model.Correlation, error)
 }
 
 type CorrelationHandler struct {
@@ -28,7 +29,7 @@ func (h *CorrelationHandler) GetCorrelationHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	correlation, err := h.correlationService.GetCorrelationByType(correlationType)
+	correlation, err := h.correlationService.GetCorrelationByType(r.Context(), correlationType)
 	if err != nil {
 		if err.Error() == "unknown correlation type" {
 			jsonError(w, err.Error(), http.StatusNotFound)
@@ -58,12 +59,15 @@ func (h *CorrelationHandler) GetCorrelationHistoryHandler(w http.ResponseWriter,
 	limitStr := r.URL.Query().Get("limit")
 	limit := 100
 	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
 	}
+	if limit > 500 {
+		limit = 500
+	}
 
-	history, err := h.correlationService.GetHistory(commodityA, commodityB, limit)
+	history, err := h.correlationService.GetHistory(r.Context(), commodityA, commodityB, limit)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -73,7 +77,6 @@ func (h *CorrelationHandler) GetCorrelationHistoryHandler(w http.ResponseWriter,
 		sanitizeCorrelation(c)
 	}
 
-	// Ensure we return [] instead of null for empty results
 	if history == nil {
 		history = []*model.Correlation{}
 	}

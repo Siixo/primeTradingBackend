@@ -3,10 +3,12 @@ package application
 import (
 	"backend/internal/domain/model"
 	"backend/internal/domain/repository"
+	"context"
 )
 
 type UserService struct {
-	userRepo repository.UserRepository
+	userRepo  repository.UserRepository
+	jwtSecret []byte
 }
 
 type LoginInput struct {
@@ -27,10 +29,10 @@ type ChangePasswordInput struct {
 	NewPassword string
 }
 
-func NewUserService(userRepo repository.UserRepository) *UserService {
-	return &UserService{userRepo}
+func NewUserService(userRepo repository.UserRepository, jwtSecret string) *UserService {
+	return &UserService{userRepo: userRepo, jwtSecret: []byte(jwtSecret)}
 }
 
-func (s *UserService) FindByID(id uint) (model.User, error) {
-	return s.userRepo.FindByID(id)
+func (s *UserService) FindByID(ctx context.Context, id uint) (model.User, error) {
+	return s.userRepo.FindByID(ctx, id)
 }

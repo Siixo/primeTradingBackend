@@ -8,14 +8,14 @@ duplicate key value violates unique constraint "user_pkey"
 Login sends an error:
 Error during login: SyntaxError: JSON.parse: unexpected character at line 1 column 1 of the JSON data
 
-## WIP:
+## WIP JWT:
 
 # Refresh token:
 
-Refresh token func written
-Need to implement service and handler
-Check incoming credentials (claims) and token
-Validate them, then renew token
+- Refresh token func written
+- Need to implement service and handler
+- Check incoming credentials (claims) and token
+- Validate them, then renew token
 
 Token refresh validation process:
 How the Cookie is Set Up

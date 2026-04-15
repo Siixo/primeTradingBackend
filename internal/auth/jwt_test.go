@@ -10,9 +10,9 @@ import (
 const jwtTestSecret = "test-secret"
 
 func TestGenerateAndVerifyJWTTokenSuccess(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", jwtTestSecret)
+	secret := []byte(jwtTestSecret)
 
-	token, err := GenerateJWTToken(42, "alice", "admin")
+	token, err := GenerateJWTToken(secret, 42, "alice", "admin")
 	if err != nil {
 		t.Fatalf("GenerateJWTToken() error = %v", err)
 	}
@@ -20,7 +20,7 @@ func TestGenerateAndVerifyJWTTokenSuccess(t *testing.T) {
 		t.Fatal("GenerateJWTToken() returned empty token")
 	}
 
-	claims, err := VerifyJWTToken(token)
+	claims, err := VerifyJWTToken(secret, token)
 	if err != nil {
 		t.Fatalf("VerifyJWTToken() error = %v", err)
 	}
@@ -40,7 +40,7 @@ func TestGenerateAndVerifyJWTTokenSuccess(t *testing.T) {
 }
 
 func TestVerifyJWTTokenExpiredToken(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", jwtTestSecret)
+	secret := []byte(jwtTestSecret)
 
 	expiredClaims := &JWTTokenClaims{
 		ID:       1,
@@ -50,19 +50,17 @@ func TestVerifyJWTTokenExpiredToken(t *testing.T) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Minute)),
 		},
 	}
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, expiredClaims).SignedString([]byte(jwtTestSecret))
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, expiredClaims).SignedString(secret)
 	if err != nil {
 		t.Fatalf("failed to sign expired token: %v", err)
 	}
 
-	if _, err := VerifyJWTToken(token); err == nil {
+	if _, err := VerifyJWTToken(secret, token); err == nil {
 		t.Fatal("VerifyJWTToken() expected error for expired token, got nil")
 	}
 }
 
 func TestVerifyJWTTokenWrongSigningKey(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", "signing-key-a")
-
 	claims := &JWTTokenClaims{
 		ID:       7,
 		Username: "eve",
@@ -76,14 +74,12 @@ func TestVerifyJWTTokenWrongSigningKey(t *testing.T) {
 		t.Fatalf("failed to sign token: %v", err)
 	}
 
-	if _, err := VerifyJWTToken(token); err == nil {
+	if _, err := VerifyJWTToken([]byte("signing-key-a"), token); err == nil {
 		t.Fatal("VerifyJWTToken() expected signature error, got nil")
 	}
 }
 
 func TestVerifyJWTTokenRejectsNonHMACMethod(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", jwtTestSecret)
-
 	noneToken := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.MapClaims{
 		"id":       1,
 		"username": "mallory",
@@ -95,13 +91,13 @@ func TestVerifyJWTTokenRejectsNonHMACMethod(t *testing.T) {
 		t.Fatalf("failed to sign none token: %v", err)
 	}
 
-	if _, err := VerifyJWTToken(token); err == nil {
+	if _, err := VerifyJWTToken([]byte(jwtTestSecret), token); err == nil {
 		t.Fatal("VerifyJWTToken() expected error for non-HMAC method, got nil")
 	}
 }
 
 func TestRefreshJWTokenUpdatesExpiry(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", jwtTestSecret)
+	secret := []byte(jwtTestSecret)
 
 	base := time.Now().Add(1 * time.Minute)
 	claims := &JWTTokenClaims{
@@ -113,12 +109,12 @@ func TestRefreshJWTokenUpdatesExpiry(t *testing.T) {
 		},
 	}
 
-	refreshed, err := RefreshJWToken(claims)
+	refreshed, err := RefreshJWToken(secret, claims)
 	if err != nil {
 		t.Fatalf("RefreshJWToken() error = %v", err)
 	}
 
-	newClaims, err := VerifyJWTToken(refreshed)
+	newClaims, err := VerifyJWTToken(secret, refreshed)
 	if err != nil {
 		t.Fatalf("VerifyJWTToken(refreshed) error = %v", err)
 	}

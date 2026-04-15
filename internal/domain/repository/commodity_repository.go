@@ -1,12 +1,14 @@
 package repository
 
-import "backend/internal/domain/model"
+import (
+	"backend/internal/domain/model"
+	"context"
+)
 
 type CommodityRepository interface {
 	Migrate() error
-	Save(stock model.Commodity) error
-	GetLatestPrice(commodity string) (model.Commodity, error)
-	GetPriceHistory(commodity string, limit int) ([]model.Commodity, error)
-	GetTotalCount() (int, error)
-	HasRecentData() (bool, error)
+	Save(ctx context.Context, stock model.Commodity) error
+	GetLatestPrice(ctx context.Context, commodity string) (model.Commodity, error)
+	GetPriceHistory(ctx context.Context, commodity string, limit int) ([]model.Commodity, error)
+	HasRecentData(ctx context.Context) (bool, error)
 }

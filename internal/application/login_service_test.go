@@ -2,6 +2,7 @@ package application
 
 import (
 	"backend/internal/domain/model"
+	"context"
 	stdErrors "errors"
 	"strings"
 	"testing"
@@ -10,20 +11,21 @@ import (
 )
 
 const correctPassword = "correct-password"
+const loginTestSecret = "app-test-secret"
 
 func TestLoginRejectsEmptyIdentifier(t *testing.T) {
-	svc := NewUserService(&fakeUserRepository{})
+	svc := NewUserService(&fakeUserRepository{}, loginTestSecret)
 
-	_, _, err := svc.Login(LoginInput{Password: "abc"})
+	_, _, err := svc.Login(context.Background(), LoginInput{Password: "abc"})
 	if err == nil || err.Error() != "user or email is required" {
 		t.Fatalf("error = %v, want user or email is required", err)
 	}
 }
 
 func TestLoginRejectsEmptyPassword(t *testing.T) {
-	svc := NewUserService(&fakeUserRepository{})
+	svc := NewUserService(&fakeUserRepository{}, loginTestSecret)
 
-	_, _, err := svc.Login(LoginInput{Identifier: "alice"})
+	_, _, err := svc.Login(context.Background(), LoginInput{Identifier: "alice"})
 	if err == nil || err.Error() != "password is required" {
 		t.Fatalf("error = %v, want password is required", err)
 	}
@@ -35,9 +37,9 @@ func TestLoginReturnsInvalidCredentialsWhenUserMissing(t *testing.T) {
 			return model.User{}, stdErrors.New("not found")
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, loginTestSecret)
 
-	_, _, err := svc.Login(LoginInput{Identifier: "alice", Password: "password"})
+	_, _, err := svc.Login(context.Background(), LoginInput{Identifier: "alice", Password: "password"})
 	if err == nil || err.Error() != "invalid credentials" {
 		t.Fatalf("error = %v, want invalid credentials", err)
 	}
@@ -54,17 +56,15 @@ func TestLoginReturnsInvalidCredentialsWhenPasswordMismatch(t *testing.T) {
 			return model.User{ID: 1, Username: "alice", Password: string(hash), Role: "user"}, nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, loginTestSecret)
 
-	_, _, err = svc.Login(LoginInput{Identifier: "alice", Password: "wrong-password"})
+	_, _, err = svc.Login(context.Background(), LoginInput{Identifier: "alice", Password: "wrong-password"})
 	if err == nil || err.Error() != "invalid credentials" {
 		t.Fatalf("error = %v, want invalid credentials", err)
 	}
 }
 
 func TestLoginSuccessReturnsTokenAndUser(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", "app-test-secret")
-
 	hash, err := bcrypt.GenerateFromPassword([]byte(correctPassword), bcrypt.DefaultCost)
 	if err != nil {
 		t.Fatalf("failed to hash test password: %v", err)
@@ -75,9 +75,9 @@ func TestLoginSuccessReturnsTokenAndUser(t *testing.T) {
 			return model.User{ID: 42, Username: "alice", Password: string(hash), Role: "admin"}, nil
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, loginTestSecret)
 
-	user, token, err := svc.Login(LoginInput{Identifier: "alice", Password: correctPassword})
+	user, token, err := svc.Login(context.Background(), LoginInput{Identifier: "alice", Password: correctPassword})
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
@@ -90,7 +90,7 @@ func TestLoginSuccessReturnsTokenAndUser(t *testing.T) {
 }
 
 func TestRefreshTokenRejectsInvalidToken(t *testing.T) {
-	svc := NewUserService(&fakeUserRepository{})
+	svc := NewUserService(&fakeUserRepository{}, loginTestSecret)
 
 	_, err := svc.RefreshToken("invalid-token")
 	if err == nil {

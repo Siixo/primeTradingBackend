@@ -3,7 +3,10 @@ package postgres
 import (
 	"backend/internal/domain/model"
 	"backend/internal/domain/repository"
+	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 )
 
 type CorrelationRepository struct {
@@ -31,26 +34,37 @@ func (p *CorrelationRepository) Migrate() error {
 }
 
 
-func (p *CorrelationRepository) Save(correlation *model.Correlation) error {
+func (p *CorrelationRepository) Save(ctx context.Context, correlation *model.Correlation) error {
 	query := `INSERT INTO correlations(commodity_a, commodity_b, correlationDate, pearsonR, spearmanRho, dataPoints) VALUES ($1, $2, $3, $4, $5, $6)`
-	_, err := p.db.Exec(query, correlation.CommodityA, correlation.CommodityB, correlation.CorrelationDate, correlation.PearsonR, correlation.SpearmanRho, correlation.DataPoints)
+	_, err := p.db.ExecContext(ctx, query, correlation.CommodityA, correlation.CommodityB, correlation.CorrelationDate, correlation.PearsonR, correlation.SpearmanRho, correlation.DataPoints)
 	return err
 }
 
-func (p *CorrelationRepository) SaveBatch(correlations []*model.Correlation) error {
-	query := `INSERT INTO correlations(commodity_a, commodity_b, correlationDate, pearsonR, spearmanRho, dataPoints) VALUES ($1, $2, $3, $4, $5, $6)`
-	for _, correlation := range correlations {
-		_, err := p.db.Exec(query, correlation.CommodityA, correlation.CommodityB, correlation.CorrelationDate, correlation.PearsonR, correlation.SpearmanRho, correlation.DataPoints)
-		if err != nil {
-			return err
-		}
+func (p *CorrelationRepository) SaveBatch(ctx context.Context, correlations []*model.Correlation) error {
+	if len(correlations) == 0 {
+		return nil
 	}
-	return nil
+
+	var b strings.Builder
+	b.WriteString("INSERT INTO correlations(commodity_a, commodity_b, correlationDate, pearsonR, spearmanRho, dataPoints) VALUES ")
+
+	args := make([]interface{}, 0, len(correlations)*6)
+	for i, c := range correlations {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		base := i * 6
+		fmt.Fprintf(&b, "($%d, $%d, $%d, $%d, $%d, $%d)", base+1, base+2, base+3, base+4, base+5, base+6)
+		args = append(args, c.CommodityA, c.CommodityB, c.CorrelationDate, c.PearsonR, c.SpearmanRho, c.DataPoints)
+	}
+
+	_, err := p.db.ExecContext(ctx, b.String(), args...)
+	return err
 }
 
-func (p *CorrelationRepository) GetLatest(commodityA, commodityB string) (*model.Correlation, error) {
+func (p *CorrelationRepository) GetLatest(ctx context.Context, commodityA, commodityB string) (*model.Correlation, error) {
 	query := `SELECT id, commodity_a, commodity_b, correlationDate, pearsonR, spearmanRho, dataPoints, createdAt FROM correlations WHERE commodity_a=$1 AND commodity_b=$2 ORDER BY correlationDate DESC LIMIT 1`
-	row := p.db.QueryRow(query, commodityA, commodityB)
+	row := p.db.QueryRowContext(ctx, query, commodityA, commodityB)
 	var correlation model.Correlation
 	err := row.Scan(&correlation.ID, &correlation.CommodityA, &correlation.CommodityB, &correlation.CorrelationDate, &correlation.PearsonR, &correlation.SpearmanRho, &correlation.DataPoints, &correlation.CreatedAt)
 	if err != nil {
@@ -59,10 +73,10 @@ func (p *CorrelationRepository) GetLatest(commodityA, commodityB string) (*model
 	return &correlation, nil
 }
 
-func (p *CorrelationRepository) GetHistory(commodityA, commodityB string, limit int) ([]*model.Correlation, error) {
+func (p *CorrelationRepository) GetHistory(ctx context.Context, commodityA, commodityB string, limit int) ([]*model.Correlation, error) {
 	query := `SELECT id, commodity_a, commodity_b, correlationDate, pearsonR, spearmanRho, dataPoints, createdAt FROM correlations WHERE commodity_a=$1 AND commodity_b=$2 ORDER BY correlationDate DESC LIMIT $3`
 	
-	rows, err := p.db.Query(query, commodityA, commodityB, limit)
+	rows, err := p.db.QueryContext(ctx, query, commodityA, commodityB, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -77,19 +91,16 @@ func (p *CorrelationRepository) GetHistory(commodityA, commodityB string, limit 
 		}
 		history = append(history, &c)
 	}
-	// Always check if there were errors encountered during the iteration
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
 	return history, nil
 }
 	
-func (p *CorrelationRepository) GetTopCorrelated(commodity string, limit int) ([]*model.Correlation, error) {
-	// Look for the commodity in either column A or B
-	// ABS(pearsonR) makes sure we find the strongest correlations (e.g., -0.9 is stronger than 0.5)
+func (p *CorrelationRepository) GetTopCorrelated(ctx context.Context, commodity string, limit int) ([]*model.Correlation, error) {
 	query := `SELECT id, commodity_a, commodity_b, correlationDate, pearsonR, spearmanRho, dataPoints, createdAt FROM correlations WHERE commodity_a=$1 OR commodity_b=$1 ORDER BY ABS(pearsonR) DESC LIMIT $2`
 	
-	rows, err := p.db.Query(query, commodity, limit)
+	rows, err := p.db.QueryContext(ctx, query, commodity, limit)
 	if err != nil {
 		return nil, err
 	}

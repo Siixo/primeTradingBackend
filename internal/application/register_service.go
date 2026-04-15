@@ -4,6 +4,7 @@ import (
 	"backend/internal/domain/model"
 	"backend/internal/errors"
 	"backend/utils"
+	"context"
 	stdErrors "errors"
 
 	"golang.org/x/crypto/bcrypt"
@@ -11,8 +12,7 @@ import (
 
 var V = utils.Validator{}
 
-func (s *UserService) Register(req RegisterInput) error {
-	// Let's check if the data is valid
+func (s *UserService) Register(ctx context.Context, req RegisterInput) error {
 	var errs errors.ValidationErrors
 
 	if err := V.Username(req.Username); err != nil {
@@ -31,17 +31,15 @@ func (s *UserService) Register(req RegisterInput) error {
 		return errs
 	}
 
-	// Let's check if user exists, checking by username and by email
-	existing, err := s.userRepo.FindByUsernameOrEmail(req.Username)
+	existing, err := s.userRepo.FindByUsernameOrEmail(ctx, req.Username)
 	if err == nil && existing.ID != 0 {
 		return stdErrors.New("username already taken")
 	}
-	existing, err = s.userRepo.FindByUsernameOrEmail(req.Email)
+	existing, err = s.userRepo.FindByUsernameOrEmail(ctx, req.Email)
 	if err == nil && existing.ID != 0 {
 		return stdErrors.New("an account with this email already exists")
 	}
 
-	// If user is not found we hash the password before registering
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -50,9 +48,10 @@ func (s *UserService) Register(req RegisterInput) error {
 		Username: req.Username,
 		Email:    req.Email,
 		Password: string(hashed),
+		Role:     "user",
 	}
 
-	if err := s.userRepo.Save(user); err != nil {
+	if err := s.userRepo.Save(ctx, user); err != nil {
 		return err
 	}
 	return nil

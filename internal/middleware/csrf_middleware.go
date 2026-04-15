@@ -43,7 +43,7 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 		// State-changing methods require the token in the header
 		headerToken := r.Header.Get(CSRFHeaderName)
 		if headerToken == "" || headerToken != token {
-			http.Error(w, "Invalid or missing CSRF token", http.StatusForbidden)
+			writeJSONError(w, "Invalid or missing CSRF token", http.StatusForbidden)
 			return
 		}
 

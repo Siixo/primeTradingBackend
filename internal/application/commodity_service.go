@@ -3,6 +3,7 @@ package application
 import (
 	"backend/internal/domain/model"
 	"backend/internal/domain/repository"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -11,15 +12,8 @@ import (
 )
 
 // MetalPriceProvider is the outbound port for fetching live metal prices.
-// Implementations live in the adapters layer (e.g. adapters/goldpricez).
 type MetalPriceProvider interface {
-	FetchPrice(metal string) (*model.Commodity, error)
-	FetchHistory(symbol string) ([]model.Commodity, error)
-	FetchCommodity() (*model.Commodity, error)
-}
-
-type CommodityRepositoryPort interface {
-	GetPriceHistory(commodity string, limit int) ([]model.Commodity, error)
+	FetchPrice(ctx context.Context, metal string) (*model.Commodity, error)
 }
 
 type CommodityService struct {
@@ -37,7 +31,7 @@ func NewCommodityService(priceProvider MetalPriceProvider, commodityRepo reposit
 	}
 }
 
-func (s *CommodityService) GetCommodityByType(commodityType string) (*model.Commodity, error) {
+func (s *CommodityService) GetCommodityByType(ctx context.Context, commodityType string) (*model.Commodity, error) {
 	if commodityType == "" {
 		return nil, errors.New("'type' query parameter is required")
 	}
@@ -47,63 +41,37 @@ func (s *CommodityService) GetCommodityByType(commodityType string) (*model.Comm
 		return nil, errors.New("unknown commodity type")
 	}
 
-	return s.priceProvider.FetchPrice(commodity)
+	return s.priceProvider.FetchPrice(ctx, commodity)
 }
 
-func (s *CommodityService) GetHistory(name string, limit int) ([]model.Commodity, error) {
+func (s *CommodityService) GetHistory(ctx context.Context, name string, limit int) ([]model.Commodity, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	return s.commodityRepo.GetPriceHistory(name, limit)
+	return s.commodityRepo.GetPriceHistory(ctx, name, limit)
 }
 
-func (s *CommodityService) UpdatePreciousPrices() error {
-	return s.updateSymbols([]string{"gold", "silver"})
+func (s *CommodityService) UpdatePreciousPrices(ctx context.Context) error {
+	return s.updateSymbols(ctx, []string{"gold", "silver"})
 }
 
-func (s *CommodityService) UpdateIndustrialPrices() error {
-	return s.updateSymbols([]string{"copper", "aluminum", "brent"})
+func (s *CommodityService) UpdateIndustrialPrices(ctx context.Context) error {
+	return s.updateSymbols(ctx, []string{"copper", "aluminum", "brent"})
 }
 
-// UpdateMetalPrices is kept for compatibility and executes both update groups.
-func (s *CommodityService) UpdateMetalPrices() error {
-	if err := s.UpdatePreciousPrices(); err != nil {
-		if err2 := s.UpdateIndustrialPrices(); err2 != nil {
-			return fmt.Errorf("precious update failed: %v; industrial update failed: %v", err, err2)
-		}
-		return err
-	}
-	return s.UpdateIndustrialPrices()
-}
-
-func (s *CommodityService) updateSymbols(symbols []string) error {
+func (s *CommodityService) updateSymbols(ctx context.Context, symbols []string) error {
 
 	successes := 0
 	var failed []string
 	for _, symbol := range symbols {
-		// First, try to fetch the historical points (e.g. last 24h)
-		history, err := s.priceProvider.FetchHistory(symbol)
-		if err == nil && len(history) > 0 {
-			for _, c := range history {
-				if err := s.commodityRepo.Save(c); err != nil {
-					// Ignore individual save errors (e.g. duplicate key)
-					continue
-				}
-			}
-			s.clearLastError(symbol)
-			successes++
-			continue
-		}
-
-		// Fallback to single price fetch if history fails or isn't supported
-		commodity, err := s.priceProvider.FetchPrice(symbol)
+		commodity, err := s.priceProvider.FetchPrice(ctx, symbol)
 		if err != nil {
 			s.setLastError(symbol, err)
 			failed = append(failed, fmt.Sprintf("fetch %s: %v", symbol, err))
 			continue
 		}
 
-		if err := s.commodityRepo.Save(*commodity); err != nil {
+		if err := s.commodityRepo.Save(ctx, *commodity); err != nil {
 			s.setLastError(symbol, err)
 			failed = append(failed, fmt.Sprintf("save %s: %v", symbol, err))
 			continue
@@ -120,15 +88,10 @@ func (s *CommodityService) updateSymbols(symbols []string) error {
 		return fmt.Errorf("all symbol updates failed: %s", strings.Join(failed, "; "))
 	}
 
-	if len(failed) > 0 {
-		// Keep the updater moving when at least one symbol is available.
-		return nil
-	}
-
 	return nil
 }
 
-func (s *CommodityService) GetStatuses() ([]model.CommodityStatus, error) {
+func (s *CommodityService) GetStatuses(ctx context.Context) ([]model.CommodityStatus, error) {
 	symbols := []string{"gold", "silver", "copper", "aluminum", "brent"}
 	statuses := make([]model.CommodityStatus, 0, len(symbols))
 
@@ -138,7 +101,7 @@ func (s *CommodityService) GetStatuses() ([]model.CommodityStatus, error) {
 			Source: sourceFor(symbol),
 		}
 
-		latest, err := s.commodityRepo.GetLatestPrice(symbol)
+		latest, err := s.commodityRepo.GetLatestPrice(ctx, symbol)
 		if err == nil {
 			status.Available = true
 			status.LastDate = &latest.Date

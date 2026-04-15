@@ -1,11 +1,13 @@
 package application
 
 import (
+	"context"
 	"errors"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *UserService) ChangePassword(req ChangePasswordInput) error {
+func (s *UserService) ChangePassword(ctx context.Context, req ChangePasswordInput) error {
 	if req.OldPassword == "" {
 		return errors.New("current password is required")
 	}
@@ -13,22 +15,24 @@ func (s *UserService) ChangePassword(req ChangePasswordInput) error {
 		return errors.New("new password is required")
 	}
 
-	user, err := s.userRepo.FindByID(req.UserID)
+	// Validate new password strength
+	if err := V.Password(req.NewPassword); err != nil {
+		return err
+	}
+
+	user, err := s.userRepo.FindByID(ctx, req.UserID)
 	if err != nil {
 		return errors.New("user not found")
 	}
 
-	// Verify old password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
 		return errors.New("incorrect current password")
 	}
 
-	// Hash new password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	// Update in repo
-	return s.userRepo.UpdatePassword(req.UserID, string(hashedPassword))
+	return s.userRepo.UpdatePassword(ctx, req.UserID, string(hashedPassword))
 }

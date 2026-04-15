@@ -1,80 +1,34 @@
 package main
 
 import (
-	authMiddleware "backend/internal/middleware"
+	"context"
 	"fmt"
 	"log"
 	stdhttp "net/http"
-	"os"
-	"strings"
+	"os/signal"
+	"syscall"
 	"time"
+
+	authMiddleware "backend/internal/middleware"
 
 	"backend/internal/adapters/alphavantage"
 	"backend/internal/adapters/postgres"
 	"backend/internal/application"
+	"backend/internal/config"
 	http "backend/internal/handler"
-
-	"net/url"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 )
 
 func main() {
-	// Loading .env file
-	godotenv.Load()
-
-	var dbHost, dbPort, dbUser, dbPassword, dbName, dbSSLMode string
-
-	// Check if DATABASE_URL is set (e.g., by Railway, Heroku, etc.)
-	databaseURL := os.Getenv("DATABASE_URL")
-	
-	if databaseURL != "" {
-		// Parse DATABASE_URL format: postgres://user:password@host:port/dbname?sslmode=require
-		u, err := url.Parse(databaseURL)
-		if err != nil {
-			log.Fatal("Failed to parse DATABASE_URL: ", err)
-		}
-
-		// Extract host and port more robustly
-		hostPort := u.Host
-		if hostPort == "" {
-			log.Fatal("DATABASE_URL has no host")
-		}
-
-		// Split host and port manually (url.Port() sometimes fails)
-		parts := strings.Split(hostPort, ":")
-		dbHost = parts[0]
-		if len(parts) > 1 {
-			dbPort = parts[1]
-		} else {
-			dbPort = "5432" // default PostgreSQL port
-		}
-
-		dbUser = u.User.Username()
-		dbPassword, _ = u.User.Password()
-		dbName = strings.TrimPrefix(u.Path, "/")
-
-		// Check query params for sslmode
-		dbSSLMode = u.Query().Get("sslmode")
-		if dbSSLMode == "" {
-			dbSSLMode = "disable"
-		}
-
-		log.Printf("Parsed DATABASE_URL: host=%s port=%s dbname=%s sslmode=%s", dbHost, dbPort, dbName, dbSSLMode)
-	} else {
-		// Fallback to individual env vars (local development)
-		dbHost = os.Getenv("DB_HOST")
-		dbPort = os.Getenv("DB_PORT")
-		dbUser = os.Getenv("DB_USER")
-		dbPassword = os.Getenv("DB_PASSWORD")
-		dbName = os.Getenv("DB_NAME")
-		dbSSLMode = getEnv("DB_SSLMODE", "disable")
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal("config: ", err)
 	}
 
-	db, err := postgres.NewPostgresDB(dbHost, dbPort, dbUser, dbPassword, dbName, dbSSLMode)
+	db, err := postgres.NewPostgresDB(cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, cfg.DB.SSLMode)
 	if err != nil {
 		log.Fatal("cannot connect to database: ", err)
 	}
@@ -90,38 +44,42 @@ func main() {
 		log.Fatal("cannot run commodity migration: ", err)
 	}
 
-	// Seed 1 year of POC historical data
-	application.RunCommoditySeeder(commodityRepo)
-
 	correlationRepo := postgres.NewCorrelationRepository(db)
 	if err := correlationRepo.Migrate(); err != nil {
 		log.Fatal("cannot run correlation migration: ", err)
 	}
 
-	userService := application.NewUserService(userRepo)
-	
-	// Route all live data through AlphaVantage/GoldPriceZ since Yahoo is rate-limiting
-	alphaClient := alphavantage.NewClient()
-	
-	commodityService := application.NewCommodityService(alphaClient, commodityRepo)
-	userHandler := http.NewUserHandler(userService)
-	commodityHandler := http.NewCommodityHandler(commodityService)
+	// Graceful shutdown context
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
+	// Seed POC data
+	application.RunCommoditySeeder(ctx, commodityRepo)
+
+	// Services
+	httpClient := &stdhttp.Client{Timeout: 30 * time.Second}
+	alphaClient := alphavantage.NewClient(httpClient, cfg.Alpha.AlphaVantageKey, cfg.Alpha.GoldPricezKey)
+
+	userService := application.NewUserService(userRepo, cfg.JWT.SigningKey)
+	commodityService := application.NewCommodityService(alphaClient, commodityRepo)
 	correlationService := application.NewCorrelationService(correlationRepo, commodityRepo)
+
+	// Handlers
+	userHandler := http.NewUserHandler(userService, cfg.Server.CookieSecure)
+	commodityHandler := http.NewCommodityHandler(commodityService)
 	correlationHandler := http.NewCorrelationHandler(correlationService)
 
+	// Router
 	r := chi.NewRouter()
-	allowedOrigins := getAllowedOrigins()
 
 	c := cors.New(cors.Options{
-		AllowedOrigins:   allowedOrigins,
+		AllowedOrigins:   cfg.Server.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	})
 	r.Use(c.Handler)
-
 	r.Use(middleware.Logger)
 	r.Use(authMiddleware.CSRFMiddleware)
 
@@ -138,7 +96,7 @@ func main() {
 
 		// Protected routes
 		r.Group(func(r chi.Router) {
-			r.Use(authMiddleware.JWTAuthMiddleware)
+			r.Use(authMiddleware.NewJWTAuthMiddleware(cfg.JWT.SigningKey))
 			r.Get("/me", userHandler.MeHandler)
 			r.Post("/user/change-password", userHandler.ChangePasswordHandler)
 			r.Get("/commodity", commodityHandler.GetCommodityHandler)
@@ -150,18 +108,20 @@ func main() {
 
 		// Admin routes
 		r.Group(func(r chi.Router) {
+			r.Use(authMiddleware.NewJWTAuthMiddleware(cfg.JWT.SigningKey))
 			r.Use(authMiddleware.AdminRoleMiddleware)
 		})
 	})
 
+	// Background commodity refresh
 	runUpdateCycle := func() {
 		log.Printf("Starting scheduled commodity refresh")
 
-		if err := commodityService.UpdatePreciousPrices(); err != nil {
+		if err := commodityService.UpdatePreciousPrices(ctx); err != nil {
 			log.Printf("Error updating precious commodities: %v", err)
 		}
 
-		if err := commodityService.UpdateIndustrialPrices(); err != nil {
+		if err := commodityService.UpdateIndustrialPrices(ctx); err != nil {
 			log.Printf("Error updating industrial commodities: %v", err)
 		}
 
@@ -173,7 +133,7 @@ func main() {
 			{"copper", "brent"},
 		}
 		for _, p := range pairs {
-			if err := correlationService.UpdateCorrelations(p[0], p[1]); err != nil {
+			if err := correlationService.UpdateCorrelations(ctx, p[0], p[1]); err != nil {
 				log.Printf("Error updating correlation %s-%s: %v", p[0], p[1], err)
 			}
 		}
@@ -181,54 +141,43 @@ func main() {
 		log.Printf("Finished scheduled commodity refresh")
 	}
 
-	// Prime the database immediately on startup so the UI has data before the first ticker tick.
 	runUpdateCycle()
 
 	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
 	go func() {
-		for range ticker.C {
-			runUpdateCycle()
+		for {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				runUpdateCycle()
+			}
 		}
 	}()
 
-	log.Println("server starting on :8080")
-	if err := stdhttp.ListenAndServe(fmt.Sprintf("%s:%s", os.Getenv("HOST"), os.Getenv("PORT")), r); err != nil {
-		log.Fatal(err)
+	// Start server
+	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
+	srv := &stdhttp.Server{
+		Addr:    addr,
+		Handler: r,
 	}
-}
 
-func getEnv(key, fallback string) string {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return fallback
-	}
-	return v
-}
-
-func getAllowedOrigins() []string {
-	configured := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
-	if configured == "" {
-		return []string{
-			"http://localhost:3100",
-			"http://127.0.0.1:3100",
-			"https://primetrading-nine.vercel.app",
+	go func() {
+		log.Printf("server starting on %s", addr)
+		if err := srv.ListenAndServe(); err != nil && err != stdhttp.ErrServerClosed {
+			log.Fatal(err)
 		}
-	}
+	}()
 
-	parts := strings.Split(configured, ",")
-	origins := make([]string, 0, len(parts))
-	for _, p := range parts {
-		origin := strings.TrimSpace(p)
-		if origin != "" {
-			origins = append(origins, origin)
-		}
-	}
+	<-ctx.Done()
+	log.Println("shutting down server...")
 
-	if len(origins) == 0 {
-		return []string{"http://localhost:3100", "http://127.0.0.1:3100"}
-	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	return origins
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Fatal("server shutdown error: ", err)
+	}
+	log.Println("server stopped")
 }

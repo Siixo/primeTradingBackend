@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -17,9 +16,7 @@ type JWTTokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-func GenerateJWTToken(id uint, username string, role string) (string, error) {
-	secret := []byte(os.Getenv("JWT_SIGNING_KEY"))
-
+func GenerateJWTToken(secret []byte, id uint, username string, role string) (string, error) {
 	expirationTime := time.Now().Add(60 * time.Minute)
 	claims := &JWTTokenClaims{
 		ID:       id,
@@ -33,8 +30,7 @@ func GenerateJWTToken(id uint, username string, role string) (string, error) {
 	return token.SignedString(secret)
 }
 
-func VerifyJWTToken(tokenString string) (*JWTTokenClaims, error) {
-	secret := []byte(os.Getenv("JWT_SIGNING_KEY"))
+func VerifyJWTToken(secret []byte, tokenString string) (*JWTTokenClaims, error) {
 	claims := &JWTTokenClaims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token)(interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -54,8 +50,7 @@ func VerifyJWTToken(tokenString string) (*JWTTokenClaims, error) {
 	return claims, nil
 }
 
-func RefreshJWToken(claims *JWTTokenClaims) (string, error) {
-	secret := []byte(os.Getenv("JWT_SIGNING_KEY"))
+func RefreshJWToken(secret []byte, claims *JWTTokenClaims) (string, error) {
 	expirationTime := time.Now().Add(60 * time.Minute)
 	claims.ExpiresAt = jwt.NewNumericDate(expirationTime)
 

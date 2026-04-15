@@ -10,8 +10,6 @@ import (
 const jwtMiddlewareSecret = "jwt-middleware-secret"
 
 func TestJWTAuthMiddlewareMissingTokenReturnsUnauthorized(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", jwtMiddlewareSecret)
-
 	nextCalled := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		nextCalled = true
@@ -21,7 +19,7 @@ func TestJWTAuthMiddlewareMissingTokenReturnsUnauthorized(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/private", nil)
 	rr := httptest.NewRecorder()
 
-	JWTAuthMiddleware(next).ServeHTTP(rr, req)
+	NewJWTAuthMiddleware(jwtMiddlewareSecret)(next).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf(statusMismatch, rr.Code, http.StatusUnauthorized)
@@ -32,8 +30,7 @@ func TestJWTAuthMiddlewareMissingTokenReturnsUnauthorized(t *testing.T) {
 }
 
 func TestJWTAuthMiddlewareValidCookieInjectsClaimsInContext(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", jwtMiddlewareSecret)
-	token, err := auth.GenerateJWTToken(11, "alice", "admin")
+	token, err := auth.GenerateJWTToken([]byte(jwtMiddlewareSecret), 11, "alice", "admin")
 	if err != nil {
 		t.Fatalf("GenerateJWTToken() error = %v", err)
 	}
@@ -54,7 +51,7 @@ func TestJWTAuthMiddlewareValidCookieInjectsClaimsInContext(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
 	rr := httptest.NewRecorder()
 
-	JWTAuthMiddleware(next).ServeHTTP(rr, req)
+	NewJWTAuthMiddleware(jwtMiddlewareSecret)(next).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf(statusMismatch, rr.Code, http.StatusOK)

@@ -3,6 +3,7 @@ package application
 import (
 	"backend/internal/domain/model"
 	validationErrors "backend/internal/errors"
+	"context"
 	stdErrors "errors"
 	"strings"
 	"testing"
@@ -19,9 +20,9 @@ const (
 
 func TestRegisterReturnsValidationErrors(t *testing.T) {
 	repo := &fakeUserRepository{}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, "register-test-secret")
 
-	err := svc.Register(RegisterInput{
+	err := svc.Register(context.Background(), RegisterInput{
 		Username:  "ab",
 		Email:     "bad-email",
 		Password:  "123",
@@ -46,9 +47,9 @@ func TestRegisterReturnsUsernameAlreadyTaken(t *testing.T) {
 			return model.User{}, stdErrors.New(notFoundErr)
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, "register-test-secret")
 
-	err := svc.Register(RegisterInput{
+	err := svc.Register(context.Background(), RegisterInput{
 		Username:  usernameAlice,
 		Email:     aliceEmail,
 		Password:  strongPassword,
@@ -68,9 +69,9 @@ func TestRegisterReturnsEmailAlreadyExists(t *testing.T) {
 			return model.User{}, stdErrors.New(notFoundErr)
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, "register-test-secret")
 
-	err := svc.Register(RegisterInput{
+	err := svc.Register(context.Background(), RegisterInput{
 		Username:  usernameAlice,
 		Email:     aliceEmail,
 		Password:  strongPassword,
@@ -87,10 +88,10 @@ func TestRegisterHashesPasswordBeforeSave(t *testing.T) {
 			return model.User{}, stdErrors.New(notFoundErr)
 		},
 	}
-	svc := NewUserService(repo)
+	svc := NewUserService(repo, "register-test-secret")
 
 	plain := strongPassword
-	err := svc.Register(RegisterInput{
+	err := svc.Register(context.Background(), RegisterInput{
 		Username:  usernameAlice,
 		Email:     aliceEmail,
 		Password:  plain,

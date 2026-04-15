@@ -2,6 +2,7 @@ package handler
 
 import (
 	"backend/internal/domain/model"
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -9,12 +10,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// CommodityServicePort defines the contract the handler depends on.
-// This decouples the handler from the concrete *application.CommodityService.
 type CommodityServicePort interface {
-	GetCommodityByType(commodityType string) (*model.Commodity, error)
-	GetHistory(name string, limit int) ([]model.Commodity, error)
-	GetStatuses() ([]model.CommodityStatus, error)
+	GetCommodityByType(ctx context.Context, commodityType string) (*model.Commodity, error)
+	GetHistory(ctx context.Context, name string, limit int) ([]model.Commodity, error)
+	GetStatuses(ctx context.Context) ([]model.CommodityStatus, error)
 }
 
 type CommodityHandler struct {
@@ -32,7 +31,7 @@ func (h *CommodityHandler) GetCommodityHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	commodity, err := h.commodityService.GetCommodityByType(commodityType)
+	commodity, err := h.commodityService.GetCommodityByType(r.Context(), commodityType)
 	if err != nil {
 		if err.Error() == "unknown commodity type" {
 			jsonError(w, err.Error(), http.StatusNotFound)
@@ -47,6 +46,7 @@ func (h *CommodityHandler) GetCommodityHandler(w http.ResponseWriter, r *http.Re
 		jsonError(w, "failed to encode response", http.StatusInternalServerError)
 	}
 }
+
 func (h *CommodityHandler) GetCommodityHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if name == "" {
@@ -57,18 +57,20 @@ func (h *CommodityHandler) GetCommodityHistoryHandler(w http.ResponseWriter, r *
 	limitStr := r.URL.Query().Get("limit")
 	limit := 100
 	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
 	}
+	if limit > 500 {
+		limit = 500
+	}
 
-	history, err := h.commodityService.GetHistory(name, limit)
+	history, err := h.commodityService.GetHistory(r.Context(), name, limit)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Ensure we return [] instead of null for empty results
 	if history == nil {
 		history = []model.Commodity{}
 	}
@@ -80,7 +82,7 @@ func (h *CommodityHandler) GetCommodityHistoryHandler(w http.ResponseWriter, r *
 }
 
 func (h *CommodityHandler) GetCommodityStatusHandler(w http.ResponseWriter, r *http.Request) {
-	statuses, err := h.commodityService.GetStatuses()
+	statuses, err := h.commodityService.GetStatuses(r.Context())
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return

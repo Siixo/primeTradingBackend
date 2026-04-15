@@ -22,37 +22,36 @@ func GetUserRoleFromContext(ctx context.Context) (string, bool) {
 	return role, ok
 }
 
-func JWTAuthMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract and validate JWT token from Authorization header
-		// If valid, extract user ID and set it in the request context
-		// If invalid, respond with 401 Unauthorized
-		var tokenString string
-		if c, err := r.Cookie("access_token"); err == nil {
-			tokenString = c.Value
-		}
-
-		if tokenString == "" {
-			authHeader := r.Header.Get("Authorization")
-			if after, ok :=strings.CutPrefix(authHeader, "Bearer "); ok  {
-				tokenString = after
+func NewJWTAuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
+	secret := []byte(jwtSecret)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var tokenString string
+			if c, err := r.Cookie("access_token"); err == nil {
+				tokenString = c.Value
 			}
-		}
 
-		if tokenString == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
+			if tokenString == "" {
+				authHeader := r.Header.Get("Authorization")
+				if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
+					tokenString = after
+				}
+			}
 
-		claims, err := auth.VerifyJWTToken(tokenString)
-		if err != nil {
-			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
-			return
-		}
+			if tokenString == "" {
+				writeJSONError(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
 
-		ctx := context.WithValue(r.Context(), userIDCtxKey, claims.ID)
-		ctx = context.WithValue(ctx, roleKey, claims.Role)
-		next.ServeHTTP(w, r.WithContext(ctx))
+			claims, err := auth.VerifyJWTToken(secret, tokenString)
+			if err != nil {
+				writeJSONError(w, "invalid or expired token", http.StatusUnauthorized)
+				return
+			}
 
-	})
+			ctx := context.WithValue(r.Context(), userIDCtxKey, claims.ID)
+			ctx = context.WithValue(ctx, roleKey, claims.Role)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }

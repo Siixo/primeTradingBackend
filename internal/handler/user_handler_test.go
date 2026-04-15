@@ -5,6 +5,7 @@ import (
 	"backend/internal/domain/model"
 	"backend/internal/middleware"
 	"bytes"
+	"context"
 	"encoding/json"
 	stdErrors "errors"
 	"net/http"
@@ -40,7 +41,7 @@ type fakeUserRepoHandler struct {
 
 func (f *fakeUserRepoHandler) Migrate() error { return nil }
 
-func (f *fakeUserRepoHandler) Save(user model.User) error {
+func (f *fakeUserRepoHandler) Save(ctx context.Context, user model.User) error {
 	f.savedUsers = append(f.savedUsers, user)
 	if f.saveFn != nil {
 		return f.saveFn(user)
@@ -48,27 +49,27 @@ func (f *fakeUserRepoHandler) Save(user model.User) error {
 	return nil
 }
 
-func (f *fakeUserRepoHandler) FindByUsernameOrEmail(identifier string) (model.User, error) {
+func (f *fakeUserRepoHandler) FindByUsernameOrEmail(ctx context.Context, identifier string) (model.User, error) {
 	if f.findByUsernameOrEmailFn != nil {
 		return f.findByUsernameOrEmailFn(identifier)
 	}
 	return model.User{}, stdErrors.New(notFoundMsg)
 }
 
-func (f *fakeUserRepoHandler) FindByID(id uint) (model.User, error) {
+func (f *fakeUserRepoHandler) FindByID(ctx context.Context, id uint) (model.User, error) {
 	if f.findByIDFn != nil {
 		return f.findByIDFn(id)
 	}
 	return model.User{}, stdErrors.New(notFoundMsg)
 }
 
-func (f *fakeUserRepoHandler) UpdatePassword(id uint, hashedPassword string) error {
+func (f *fakeUserRepoHandler) UpdatePassword(ctx context.Context, id uint, hashedPassword string) error {
 	return nil
 }
 
 func newHandlerWithRepo(repo *fakeUserRepoHandler) *UserHandler {
-	svc := application.NewUserService(repo)
-	return NewUserHandler(svc)
+	svc := application.NewUserService(repo, authTestSecret)
+	return NewUserHandler(svc, false)
 }
 
 func TestRegisterUserHandlerMethodNotAllowed(t *testing.T) {
@@ -113,8 +114,6 @@ func TestRegisterUserHandlerSuccess(t *testing.T) {
 }
 
 func TestLoginUserHandlerSuccessSetsCookieAndResponse(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", authTestSecret)
-
 	hash, err := bcrypt.GenerateFromPassword([]byte(strongPass), bcrypt.DefaultCost)
 	if err != nil {
 		t.Fatalf("hash generation failed: %v", err)
@@ -203,7 +202,6 @@ func TestMeHandlerUnauthorizedWithoutJWTContext(t *testing.T) {
 }
 
 func TestMeHandlerSuccessThroughJWTMiddleware(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", authTestSecret)
 	hash, err := bcrypt.GenerateFromPassword([]byte(strongPass), bcrypt.DefaultCost)
 	if err != nil {
 		t.Fatalf("hash generation failed: %v", err)
@@ -219,13 +217,13 @@ func TestMeHandlerSuccessThroughJWTMiddleware(t *testing.T) {
 	}
 	h := newHandlerWithRepo(repo)
 
-	tokenSvc := application.NewUserService(repo)
-	_, token, err := tokenSvc.Login(application.LoginInput{Identifier: testUsername, Password: strongPass})
+	tokenSvc := application.NewUserService(repo, authTestSecret)
+	_, token, err := tokenSvc.Login(context.Background(), application.LoginInput{Identifier: testUsername, Password: strongPass})
 	if err != nil {
 		t.Fatalf("failed to generate login token: %v", err)
 	}
 
-	next := middleware.JWTAuthMiddleware(http.HandlerFunc(h.MeHandler))
+	next := middleware.NewJWTAuthMiddleware(authTestSecret)(http.HandlerFunc(h.MeHandler))
 	req := httptest.NewRequest(http.MethodGet, apiPathMe, nil)
 	req.AddCookie(&http.Cookie{Name: accessTokenCookie, Value: token})
 	rr := httptest.NewRecorder()

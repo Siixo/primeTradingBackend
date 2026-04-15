@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"backend/internal/domain/repository"
+	"context"
 	"database/sql"
 
 	"backend/internal/domain/model"
@@ -30,7 +31,7 @@ func (p *CommodityRepository) Migrate() error {
 	return err
 }
 
-func (p *CommodityRepository) Save(stock model.Commodity) error {
+func (p *CommodityRepository) Save(ctx context.Context, stock model.Commodity) error {
 	query := `INSERT INTO commodities (name, date, price_kg, unit, fetched_at) 
 			  VALUES ($1, $2, $3, $4, $5) 
 			  ON CONFLICT (name, date) 
@@ -38,14 +39,14 @@ func (p *CommodityRepository) Save(stock model.Commodity) error {
 			  	price_kg = EXCLUDED.price_kg,
 			  	unit = EXCLUDED.unit,
 			  	fetched_at = EXCLUDED.fetched_at`
-	_, err := p.db.Exec(query, stock.Name, stock.Date, stock.PriceKg, stock.Unit, stock.FetchedAt)
+	_, err := p.db.ExecContext(ctx, query, stock.Name, stock.Date, stock.PriceKg, stock.Unit, stock.FetchedAt)
 	return err
 }
 
-func (p *CommodityRepository) GetLatestPrice(commodity string) (model.Commodity, error) {
+func (p *CommodityRepository) GetLatestPrice(ctx context.Context, commodity string) (model.Commodity, error) {
 	query := `SELECT id, name, date, price_kg, unit, fetched_at
 			  FROM commodities WHERE name=$1 ORDER BY date DESC LIMIT 1`
-	row := p.db.QueryRow(query, commodity)
+	row := p.db.QueryRowContext(ctx, query, commodity)
 	var c model.Commodity
 	err := row.Scan(&c.ID, &c.Name, &c.Date, &c.PriceKg, &c.Unit, &c.FetchedAt)
 	if err != nil {
@@ -54,10 +55,10 @@ func (p *CommodityRepository) GetLatestPrice(commodity string) (model.Commodity,
 	return c, nil
 }
 
-func (p *CommodityRepository) GetPriceHistory(commodity string, limit int) ([]model.Commodity, error) {
+func (p *CommodityRepository) GetPriceHistory(ctx context.Context, commodity string, limit int) ([]model.Commodity, error) {
 	query := `SELECT id, name, date, price_kg, unit, fetched_at
 			  FROM commodities WHERE name=$1 ORDER BY date DESC LIMIT $2`
-	rows, err := p.db.Query(query, commodity, limit)
+	rows, err := p.db.QueryContext(ctx, query, commodity, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -77,16 +78,9 @@ func (p *CommodityRepository) GetPriceHistory(commodity string, limit int) ([]mo
 	return history, nil
 }
 
-func (p *CommodityRepository) GetTotalCount() (int, error) {
+func (p *CommodityRepository) HasRecentData(ctx context.Context) (bool, error) {
 	var count int
-	err := p.db.QueryRow("SELECT COUNT(*) FROM commodities").Scan(&count)
-	return count, err
-}
-
-func (p *CommodityRepository) HasRecentData() (bool, error) {
-	var count int
-	// Check for any data in the last 48 hours
-	err := p.db.QueryRow("SELECT COUNT(*) FROM commodities WHERE date > NOW() - INTERVAL '2 days'").Scan(&count)
+	err := p.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commodities WHERE date > NOW() - INTERVAL '2 days'").Scan(&count)
 	if err != nil {
 		return false, err
 	}
